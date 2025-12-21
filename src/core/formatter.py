@@ -21,15 +21,15 @@ def get_magnitude_emoji(magnitude: float) -> str:
     Pure function.
     """
     if magnitude >= 7.0:
-        return ":rotating_light:"  # Major
+        return "🚨"  # Major
     elif magnitude >= 6.0:
-        return ":warning:"  # Strong
+        return "⚠️"  # Strong
     elif magnitude >= 5.0:
-        return ":large_orange_diamond:"  # Moderate
+        return "🔶"  # Moderate
     elif magnitude >= 4.0:
-        return ":small_orange_diamond:"  # Light
+        return "🔸"  # Light
     else:
-        return ":small_blue_diamond:"  # Minor
+        return "🔹"  # Minor
 
 
 def get_severity_label(magnitude: float) -> str:
@@ -119,17 +119,17 @@ def format_slack_message(
     # Add special alerts
     special_alerts = []
     if earthquake.tsunami:
-        special_alerts.append(":ocean: *TSUNAMI WARNING ISSUED*")
+        special_alerts.append("🌊 *TSUNAMI WARNING ISSUED*")
     if earthquake.alert:
         alert_emoji = {
-            "green": ":green_circle:",
-            "yellow": ":yellow_circle:",
-            "orange": ":orange_circle:",
-            "red": ":red_circle:",
-        }.get(earthquake.alert, ":white_circle:")
+            "green": "🟢",
+            "yellow": "🟡",
+            "orange": "🟠",
+            "red": "🔴",
+        }.get(earthquake.alert, "⚪")
         special_alerts.append(f"{alert_emoji} PAGER Alert Level: {earthquake.alert.upper()}")
     if earthquake.felt:
-        special_alerts.append(f":busts_in_silhouette: Felt by {earthquake.felt} people")
+        special_alerts.append(f"👥 Felt by {earthquake.felt} people")
 
     if special_alerts:
         blocks.append({
@@ -198,7 +198,7 @@ def format_batch_summary(earthquakes: list[Earthquake]) -> dict[str, Any]:
     count = len(earthquakes)
     max_mag = max(e.magnitude for e in earthquakes)
 
-    text = f":earthquake: {count} earthquake(s) detected, max magnitude {max_mag:.1f}"
+    text = f"🌍 {count} earthquake(s) detected, max magnitude {max_mag:.1f}"
 
     blocks: list[dict[str, Any]] = [
         {
