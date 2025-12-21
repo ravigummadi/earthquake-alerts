@@ -120,14 +120,6 @@ def format_slack_message(
     special_alerts = []
     if earthquake.tsunami:
         special_alerts.append(":ocean: *TSUNAMI WARNING ISSUED*")
-    if earthquake.alert:
-        alert_emoji = {
-            "green": ":green_circle:",
-            "yellow": ":yellow_circle:",
-            "orange": ":orange_circle:",
-            "red": ":red_circle:",
-        }.get(earthquake.alert, ":white_circle:")
-        special_alerts.append(f"{alert_emoji} PAGER Alert Level: {earthquake.alert.upper()}")
     if earthquake.felt:
         special_alerts.append(f":busts_in_silhouette: Felt by {earthquake.felt} people")
 
