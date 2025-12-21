@@ -146,9 +146,35 @@ gcloud functions deploy earthquake-monitor \
 3. Write unit tests for new rules
 4. No changes to shell needed
 
+## Git Workflow
+
+**IMPORTANT**: This project deploys to GCP from the `main` branch only.
+
+### Branch Strategy
+1. **Always develop on feature branches** (e.g., `claude/feature-name-xyz`)
+2. **Push to feature branch** - never push directly to `main`
+3. **Owner merges to `main`** - the owner will personally merge PRs to main for GCP deployment
+4. **Each feature/fix should be a separate commit** - maintain clean commit history with descriptive messages
+
+### Commit Guidelines
+- Each logical change should be a separate commit
+- Write descriptive commit messages explaining the "why"
+- Keep commits atomic and focused
+- Example commit structure:
+  ```
+  Add earthquake data models and parsing (functional core)
+
+  Pure functions for parsing USGS GeoJSON data:
+  - Earthquake dataclass with all event properties
+  - parse_earthquakes() to convert API response to typed objects
+  - filter_by_magnitude() and filter_by_time() helpers
+  ```
+
 ## Personal Preferences Applied
 - Always use Functional Core, Imperative Shell pattern
 - Keep shell layer thin
 - Pure functions for all business logic
 - Comprehensive type hints
 - Dataclasses for models
+- Develop on feature branches, owner merges to main
+- Clean commit history with separate commits per logical change
