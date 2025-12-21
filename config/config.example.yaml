@@ -1,0 +1,74 @@
+# Earthquake Alerts Configuration
+# Copy this file to config.yaml and customize for your deployment
+
+# How often to check for new earthquakes (used by Cloud Scheduler)
+polling_interval_seconds: 60
+
+# How far back to look for earthquakes on each poll
+lookback_hours: 1
+
+# Minimum magnitude to fetch from USGS (reduces API load)
+min_fetch_magnitude: 2.0
+
+# Firestore collection for storing alerted earthquake IDs
+firestore_collection: earthquake_alerts
+
+# Geographic regions to monitor
+monitoring_regions:
+  - name: "Bay Area"
+    bounds:
+      min_latitude: 35.9024
+      max_latitude: 39.18543
+      min_longitude: -122.92603
+      max_longitude: -120.71777
+
+# Points of interest for proximity alerts
+points_of_interest:
+  - name: "SF Office"
+    latitude: 37.7749
+    longitude: -122.4194
+    alert_radius_km: 50
+
+  - name: "Oakland Office"
+    latitude: 37.8044
+    longitude: -122.2712
+    alert_radius_km: 30
+
+# Notification channels with their alert rules
+alert_channels:
+  # Critical alerts - only significant earthquakes
+  - name: "earthquake-critical"
+    type: slack
+    webhook_url: "${SLACK_WEBHOOK_CRITICAL}"
+    rules:
+      min_magnitude: 5.0
+      bounds:
+        min_latitude: 35.9024
+        max_latitude: 39.18543
+        min_longitude: -122.92603
+        max_longitude: -120.71777
+      alert_on_tsunami: true
+      alert_on_felt: true
+      felt_threshold: 500
+
+  # All alerts - any notable earthquake in the region
+  - name: "earthquake-all"
+    type: slack
+    webhook_url: "${SLACK_WEBHOOK_ALL}"
+    rules:
+      min_magnitude: 3.0
+      bounds:
+        min_latitude: 35.9024
+        max_latitude: 39.18543
+        min_longitude: -122.92603
+        max_longitude: -120.71777
+
+  # Proximity alerts - earthquakes near our offices
+  - name: "earthquake-nearby"
+    type: slack
+    webhook_url: "${SLACK_WEBHOOK_NEARBY}"
+    rules:
+      min_magnitude: 2.5
+      points_of_interest:
+        - "SF Office"
+        - "Oakland Office"
