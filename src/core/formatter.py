@@ -5,9 +5,13 @@ All functions are pure with no side effects.
 """
 
 from dataclasses import dataclass
+from datetime import timezone, timedelta
 from typing import Any
 
 from src.core.earthquake import Earthquake
+
+# PST is UTC-8
+PST = timezone(timedelta(hours=-8), name="PST")
 from src.core.geo import PointOfInterest, get_distance_to_poi
 
 
@@ -60,7 +64,8 @@ def format_earthquake_summary(earthquake: Earthquake) -> str:
     Returns:
         One-line summary string
     """
-    time_str = earthquake.time.strftime("%Y-%m-%d %H:%M:%S UTC")
+    pst_time = earthquake.time.astimezone(PST)
+    time_str = pst_time.strftime("%Y-%m-%d %H:%M:%S PST")
     return (
         f"M{earthquake.magnitude:.1f} - {earthquake.place} "
         f"at {time_str} (depth: {earthquake.depth_km:.1f}km)"
@@ -86,10 +91,11 @@ def format_slack_message(
     """
     emoji = get_magnitude_emoji(earthquake.magnitude)
     severity = get_severity_label(earthquake.magnitude)
-    time_str = earthquake.time.strftime("%Y-%m-%d %H:%M:%S UTC")
+    pst_time = earthquake.time.astimezone(PST)
+    time_str = pst_time.strftime("%Y-%m-%d %H:%M:%S PST")
 
-    # Build the main text
-    text = f"{emoji} *{severity} Earthquake Detected*"
+    # Build the main text with @everyone to alert all users
+    text = f"<!everyone> {emoji} *{severity} Earthquake Detected*"
 
     # Build blocks for rich formatting
     blocks: list[dict[str, Any]] = [
@@ -228,7 +234,8 @@ def format_batch_summary(earthquakes: list[Earthquake]) -> dict[str, Any]:
     # Add summary of each earthquake
     lines = []
     for eq in earthquakes[:10]:  # Limit to 10 for readability
-        time_str = eq.time.strftime("%H:%M UTC")
+        pst_time = eq.time.astimezone(PST)
+        time_str = pst_time.strftime("%H:%M PST")
         emoji = get_magnitude_emoji(eq.magnitude)
         lines.append(f"{emoji} M{eq.magnitude:.1f} - {eq.place} ({time_str})")
 
