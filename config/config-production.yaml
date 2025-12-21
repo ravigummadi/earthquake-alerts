@@ -1,0 +1,48 @@
+# Earthquake Alerts Production Configuration
+# This file can be safely committed to version control as it uses Secret Manager
+
+# How often to check for new earthquakes (used by Cloud Scheduler)
+polling_interval_seconds: 60
+
+# How far back to look for earthquakes on each poll
+lookback_hours: 48
+
+# Minimum magnitude to fetch from USGS (reduces API load)
+min_fetch_magnitude: 2.0
+
+# Firestore database name
+firestore_database: earthquake-alerts
+
+# Firestore collection for storing alerted earthquake IDs
+firestore_collection: earthquake_alerts
+
+# Geographic regions to monitor
+monitoring_regions:
+  - name: "San Ramon Area"
+    bounds:
+      min_latitude: 37.3
+      max_latitude: 38.3
+      min_longitude: -122.5
+      max_longitude: -121.5
+
+# Points of interest for proximity alerts
+points_of_interest:
+  - name: "San Ramon"
+    latitude: 37.7799
+    longitude: -121.9780
+    alert_radius_km: 50
+
+# Notification channels with their alert rules
+alert_channels:
+  # All earthquakes in the San Ramon Area
+  - name: "earthquake-alerts"
+    type: slack
+    # Webhook URL is securely stored in Secret Manager
+    webhook_url: "${secret:slack-webhook-url}"
+    rules:
+      min_magnitude: 3.0
+      bounds:
+        min_latitude: 37.3
+        max_latitude: 38.3
+        min_longitude: -122.5
+        max_longitude: -121.5

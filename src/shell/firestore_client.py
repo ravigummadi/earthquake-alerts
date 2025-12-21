@@ -30,10 +30,12 @@ class FirestoreConfig:
 
     Attributes:
         project_id: GCP project ID (None for default)
+        database: Firestore database name (None for default database)
         collection: Firestore collection name
         document: Document ID for storing alerted IDs
     """
     project_id: str | None = None
+    database: str | None = None
     collection: str = DEFAULT_COLLECTION
     document: str = DEFAULT_DOCUMENT
 
@@ -63,10 +65,12 @@ class FirestoreClient:
     def client(self) -> firestore.Client:
         """Lazy initialization of Firestore client."""
         if self._client is None:
+            kwargs = {}
             if self.config.project_id:
-                self._client = firestore.Client(project=self.config.project_id)
-            else:
-                self._client = firestore.Client()
+                kwargs['project'] = self.config.project_id
+            if self.config.database:
+                kwargs['database'] = self.config.database
+            self._client = firestore.Client(**kwargs)
         return self._client
 
     def _get_doc_ref(self) -> Any:

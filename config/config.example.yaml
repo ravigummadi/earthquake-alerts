@@ -10,6 +10,10 @@ lookback_hours: 1
 # Minimum magnitude to fetch from USGS (reduces API load)
 min_fetch_magnitude: 2.0
 
+# Firestore database name (use "earthquake-alerts" for the created database)
+# Leave commented to use default database
+firestore_database: earthquake-alerts
+
 # Firestore collection for storing alerted earthquake IDs
 firestore_collection: earthquake_alerts
 
@@ -39,7 +43,10 @@ alert_channels:
   # Critical alerts - only significant earthquakes
   - name: "earthquake-critical"
     type: slack
-    webhook_url: "${SLACK_WEBHOOK_CRITICAL}"
+    # Use Secret Manager (recommended for production)
+    webhook_url: "${secret:slack-webhook-critical}"
+    # Or use environment variable
+    # webhook_url: "${SLACK_WEBHOOK_CRITICAL}"
     rules:
       min_magnitude: 5.0
       bounds:
@@ -54,7 +61,7 @@ alert_channels:
   # All alerts - any notable earthquake in the region
   - name: "earthquake-all"
     type: slack
-    webhook_url: "${SLACK_WEBHOOK_ALL}"
+    webhook_url: "${secret:slack-webhook-all}"
     rules:
       min_magnitude: 3.0
       bounds:
@@ -66,7 +73,7 @@ alert_channels:
   # Proximity alerts - earthquakes near our offices
   - name: "earthquake-nearby"
     type: slack
-    webhook_url: "${SLACK_WEBHOOK_NEARBY}"
+    webhook_url: "${secret:slack-webhook-nearby}"
     rules:
       min_magnitude: 2.5
       points_of_interest:

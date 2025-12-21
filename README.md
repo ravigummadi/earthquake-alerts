@@ -59,13 +59,16 @@ export MONITORING_BOUNDS="35.9,39.2,-123.0,-120.7"  # min_lat,max_lat,min_lon,ma
 export MIN_MAGNITUDE="3.0"
 ```
 
-**Full mode** (YAML configuration):
+**Full mode** (YAML configuration with Secret Manager - Recommended for production):
 
 ```bash
-cp config/config.example.yaml config/config.yaml
-# Edit config/config.yaml with your settings
-export SLACK_WEBHOOK_CRITICAL="https://hooks.slack.com/..."
-export SLACK_WEBHOOK_ALL="https://hooks.slack.com/..."
+# Store webhook URL securely in Secret Manager
+echo -n "https://hooks.slack.com/services/YOUR/WEBHOOK/URL" | \
+  gcloud secrets create slack-webhook-url --data-file=- --replication-policy=automatic
+
+# Copy and edit config file (use ${secret:slack-webhook-url} for webhook URLs)
+cp config/config.example.yaml config/config-production.yaml
+# Edit config-production.yaml with your settings
 ```
 
 ### 3. Deploy to GCP
@@ -74,14 +77,55 @@ export SLACK_WEBHOOK_ALL="https://hooks.slack.com/..."
 # Set your GCP project
 gcloud config set project YOUR_PROJECT_ID
 
+# Enable billing for your project (required)
+# Visit: https://console.cloud.google.com/billing/projects
+
 # Enable required APIs
 gcloud services enable \
     cloudfunctions.googleapis.com \
     firestore.googleapis.com \
-    cloudscheduler.googleapis.com
+    cloudscheduler.googleapis.com \
+    cloudbuild.googleapis.com \
+    secretmanager.googleapis.com
 
-# Deploy
-./deploy.sh
+# Create Firestore database (Native mode)
+gcloud firestore databases create \
+    --location=us-central1 \
+    --type=firestore-native \
+    --database=earthquake-alerts
+
+# Store Slack webhook in Secret Manager (recommended - keeps secrets out of code)
+echo -n "https://hooks.slack.com/services/YOUR/WEBHOOK/URL" | \
+    gcloud secrets create slack-webhook-url --data-file=- --replication-policy=automatic
+
+# Grant Cloud Function service account access to the secret
+PROJECT_NUMBER=$(gcloud projects describe YOUR_PROJECT_ID --format="value(projectNumber)")
+gcloud secrets add-iam-policy-binding slack-webhook-url \
+    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+
+# env-vars.yaml is already configured (no sensitive data)
+
+# Deploy Cloud Function
+gcloud functions deploy earthquake-monitor \
+  --gen2 \
+  --runtime=python311 \
+  --region=us-central1 \
+  --source=. \
+  --entry-point=earthquake_monitor \
+  --trigger-http \
+  --allow-unauthenticated \
+  --memory=256MB \
+  --timeout=60s \
+  --env-vars-file=env-vars.yaml
+
+# Create Cloud Scheduler job (runs every 5 minutes)
+gcloud scheduler jobs create http earthquake-monitor-scheduler \
+  --location=us-central1 \
+  --schedule="*/5 * * * *" \
+  --uri="https://REGION-PROJECT.cloudfunctions.net/earthquake-monitor" \
+  --http-method=POST \
+  --time-zone="UTC"
 ```
 
 ### 4. Test
@@ -95,6 +139,22 @@ gcloud functions logs read earthquake-monitor --region=us-central1
 ```
 
 ## Configuration
+
+### Secret Management
+
+**Recommended for production**: Use Google Cloud Secret Manager to store sensitive webhook URLs securely:
+
+```yaml
+# In your config YAML file
+alert_channels:
+  - name: "earthquake-alerts"
+    type: slack
+    webhook_url: "${secret:slack-webhook-url}"  # Reads from Secret Manager
+```
+
+The application supports:
+- `${secret:SECRET_NAME}` - Reads from Google Cloud Secret Manager (recommended)
+- `${ENV_VAR_NAME}` - Reads from environment variable (for local development)
 
 ### YAML Configuration
 
@@ -139,10 +199,12 @@ points_of_interest:
 | `SLACK_WEBHOOK_URL` | Default Slack webhook (simple mode) | If no config file |
 | `SLACK_WEBHOOK_*` | Named webhooks referenced in config | If using YAML |
 | `CONFIG_PATH` | Path to YAML config file | No |
+| `FIRESTORE_DATABASE` | Firestore database name (e.g., "earthquake-alerts") | Recommended |
 | `GCP_PROJECT` | GCP project ID | No (uses default) |
 | `LOG_LEVEL` | Logging level (DEBUG, INFO, etc.) | No |
 | `MONITORING_BOUNDS` | Geographic bounds (simple mode) | No |
 | `MIN_MAGNITUDE` | Minimum magnitude (simple mode) | No |
+| `LOOKBACK_HOURS` | Hours to look back for earthquakes | No (default: 1) |
 
 ## Development
 
@@ -211,6 +273,8 @@ Running on GCP (estimated monthly):
 - Cloud Functions: ~$0-5 (depends on frequency)
 - Firestore: ~$0 (free tier covers typical usage)
 - Cloud Scheduler: ~$0.10
+
+**Note**: The application uses a named Firestore database (`earthquake-alerts`) in Native mode. If your GCP project already has a Datastore Mode database, the named database allows both to coexist without conflicts.
 
 ## Extending
 

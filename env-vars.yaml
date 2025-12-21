@@ -1,0 +1,13 @@
+# Environment variables for Cloud Function deployment
+# Sensitive values (webhook URLs) are stored in Secret Manager
+# See README.md for instructions on setting up secrets
+
+LOG_LEVEL: INFO
+GCP_PROJECT: gen-lang-client-0579637657
+CONFIG_PATH: config/config-production.yaml
+
+# These are only used if CONFIG_PATH is not set (simple mode)
+# MONITORING_BOUNDS: "37.3,38.3,-122.5,-121.5"
+# MIN_MAGNITUDE: "3.0"
+# LOOKBACK_HOURS: "48"
+# FIRESTORE_DATABASE: "earthquake-alerts"

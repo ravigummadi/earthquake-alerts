@@ -101,7 +101,10 @@ class Orchestrator:
         self.usgs_client = usgs_client or USGSClient()
         self.slack_client = slack_client or SlackClient()
         self.firestore_client = firestore_client or FirestoreClient(
-            FirestoreConfig(collection=config.firestore_collection)
+            FirestoreConfig(
+                database=config.firestore_database,
+                collection=config.firestore_collection,
+            )
         )
 
     def _get_combined_bounds(self) -> BoundingBox | None:

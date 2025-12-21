@@ -37,8 +37,11 @@ This project strictly follows the **Functional Core, Imperative Shell** pattern 
 earthquake-alerts/
 ├── CLAUDE.md                 # This file
 ├── README.md                 # User documentation
+├── main.py                   # Root entry point (imports from src)
+├── env-vars.yaml             # Environment variables for deployment
 ├── config/
-│   └── config.example.yaml   # Example configuration
+│   ├── config.example.yaml   # Example configuration
+│   └── config.yaml           # Local config (gitignored)
 ├── src/
 │   ├── core/                 # FUNCTIONAL CORE (pure functions)
 │   │   ├── earthquake.py     # Earthquake data models & parsing
@@ -50,6 +53,7 @@ earthquake-alerts/
 │   │   ├── usgs_client.py    # USGS API client
 │   │   ├── slack_client.py   # Slack webhook client
 │   │   ├── firestore_client.py # Firestore for deduplication
+│   │   ├── secret_manager_client.py # Secret Manager for secrets
 │   │   └── config_loader.py  # Config loading
 │   ├── orchestrator.py       # Wires core + shell
 │   └── main.py               # Cloud Function entry point
@@ -96,11 +100,21 @@ Cloud Scheduler (cron)
 ```
 
 ## Configuration
-- **Environment variables**: Secrets (webhook URLs, GCP project)
-- **YAML config**: Regions, channels, rules (can be in GCS or bundled)
+- **Secret Manager (Recommended)**: Store sensitive webhook URLs in GCP Secret Manager
+  - Use `${secret:SECRET_NAME}` syntax in YAML config files
+  - Keeps secrets out of version control
+  - Handled by `SecretManagerClient` in the shell layer
+- **Environment variables**: Non-sensitive configuration
+  - Set in `env-vars.yaml` for deployment (safe to commit)
+  - Supports simple mode with bounds and thresholds
+- **YAML config**: Regions, channels, rules
+  - `config/config-production.yaml` for deployment (uses Secret Manager)
+  - `config/config.yaml` for local development (gitignored)
 
 ## Key Design Decisions
 1. **Firestore for deduplication**: Serverless, scales to zero, cheap for low-volume key-value lookups
+   - Uses named database (`earthquake-alerts`) to avoid conflicts with default Datastore Mode database
+   - Supports both default and named databases via configuration
 2. **Cloud Functions**: Event-driven, pay-per-use, triggered by Cloud Scheduler
 3. **Webhook-based Slack**: Simple, no OAuth flow, just POST to URL
 4. **USGS FDSN API**: Supports custom bounding boxes and time ranges
@@ -124,12 +138,25 @@ pytest tests/ -v
 # Local testing
 python -c "from src.main import earthquake_monitor; earthquake_monitor(None, None)"
 
+# GCP Setup (first time)
+gcloud services enable cloudfunctions.googleapis.com firestore.googleapis.com cloudscheduler.googleapis.com cloudbuild.googleapis.com
+gcloud firestore databases create --location=us-central1 --type=firestore-native --database=earthquake-alerts
+
 # Deploy to GCP
 gcloud functions deploy earthquake-monitor \
+  --gen2 \
   --runtime python311 \
+  --region us-central1 \
   --trigger-http \
   --entry-point earthquake_monitor \
-  --set-env-vars "CONFIG_PATH=config/config.yaml"
+  --env-vars-file env-vars.yaml
+
+# Create Cloud Scheduler job
+gcloud scheduler jobs create http earthquake-monitor-scheduler \
+  --location us-central1 \
+  --schedule "*/5 * * * *" \
+  --uri "https://REGION-PROJECT.cloudfunctions.net/earthquake-monitor" \
+  --http-method POST
 ```
 
 ## Adding New Features

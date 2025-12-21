@@ -8,12 +8,13 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
 
 from src.core.geo import BoundingBox, PointOfInterest
 from src.core.rules import AlertChannel, AlertRule
+from src.shell.secret_manager_client import SecretManagerClient, SecretManagerConfig
 
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ class Config:
         monitoring_regions: Regions to monitor
         alert_channels: Notification channels with their rules
         points_of_interest: Named locations for proximity alerts
+        firestore_database: Firestore database name (None for default)
         firestore_collection: Firestore collection for deduplication
         min_fetch_magnitude: Minimum magnitude to fetch from USGS
     """
@@ -49,23 +51,69 @@ class Config:
     monitoring_regions: list[MonitoringRegion] = field(default_factory=list)
     alert_channels: list[AlertChannel] = field(default_factory=list)
     points_of_interest: list[PointOfInterest] = field(default_factory=list)
+    firestore_database: str | None = None
     firestore_collection: str = "earthquake_alerts"
     min_fetch_magnitude: float | None = None
 
 
-def _expand_env_vars(value: str) -> str:
-    """Expand environment variables in a string.
+def _get_secret_manager_client() -> Optional[SecretManagerClient]:
+    """Get or create a Secret Manager client.
 
-    Supports ${VAR_NAME} syntax.
+    Returns None if GCP_PROJECT is not set (e.g., local development).
+    """
+    project_id = os.environ.get("GCP_PROJECT")
+    if not project_id:
+        # Try to get from gcloud config
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["gcloud", "config", "get-value", "project"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                project_id = result.stdout.strip()
+        except Exception:
+            pass
+
+    if project_id:
+        return SecretManagerClient(SecretManagerConfig(project_id=project_id))
+    return None
+
+
+def _expand_env_vars(value: str, secret_client: Optional[SecretManagerClient] = None) -> str:
+    """Expand environment variables or secrets in a string.
+
+    Supports:
+    - ${VAR_NAME} - environment variable
+    - ${secret:SECRET_NAME} - Secret Manager secret
     """
     if not isinstance(value, str):
         return value
 
     if value.startswith("${") and value.endswith("}"):
-        var_name = value[2:-1]
-        env_value = os.environ.get(var_name)
+        var_spec = value[2:-1]
+
+        # Check if it's a secret reference
+        if var_spec.startswith("secret:"):
+            secret_name = var_spec[7:]  # Remove "secret:" prefix
+            if secret_client:
+                secret_value = secret_client.get_secret(secret_name)
+                if secret_value:
+                    return secret_value
+                logger.warning("Secret %s not found, checking environment", secret_name)
+            # Fall back to environment variable with same name
+            env_value = os.environ.get(secret_name.upper().replace("-", "_"))
+            if env_value:
+                return env_value
+            logger.warning("Secret/env var %s not found", secret_name)
+            return value
+
+        # Regular environment variable
+        env_value = os.environ.get(var_spec)
         if env_value is None:
-            logger.warning("Environment variable %s not set", var_name)
+            logger.warning("Environment variable %s not set", var_spec)
             return value
         return env_value
 
@@ -115,9 +163,13 @@ def _parse_alert_rule(data: dict[str, Any], pois: list[PointOfInterest]) -> Aler
     )
 
 
-def _parse_channel(data: dict[str, Any], pois: list[PointOfInterest]) -> AlertChannel:
+def _parse_channel(
+    data: dict[str, Any],
+    pois: list[PointOfInterest],
+    secret_client: Optional[SecretManagerClient] = None,
+) -> AlertChannel:
     """Parse an alert channel from config data."""
-    webhook_url = _expand_env_vars(data["webhook_url"])
+    webhook_url = _expand_env_vars(data["webhook_url"], secret_client)
     rules_data = data.get("rules", {})
 
     return AlertChannel(
@@ -147,6 +199,9 @@ def load_config_from_dict(data: dict[str, Any]) -> Config:
     Returns:
         Parsed Config object
     """
+    # Get Secret Manager client for secret expansion
+    secret_client = _get_secret_manager_client()
+
     # Parse POIs first (channels may reference them)
     pois = [
         _parse_poi(p)
@@ -159,9 +214,9 @@ def load_config_from_dict(data: dict[str, Any]) -> Config:
         for r in data.get("monitoring_regions", [])
     ]
 
-    # Parse channels
+    # Parse channels (will use secret_client for webhook URLs)
     channels = [
-        _parse_channel(c, pois)
+        _parse_channel(c, pois, secret_client)
         for c in data.get("alert_channels", [])
     ]
 
@@ -171,6 +226,7 @@ def load_config_from_dict(data: dict[str, Any]) -> Config:
         monitoring_regions=regions,
         alert_channels=channels,
         points_of_interest=pois,
+        firestore_database=data.get("firestore_database"),
         firestore_collection=data.get("firestore_collection", "earthquake_alerts"),
         min_fetch_magnitude=data.get("min_fetch_magnitude"),
     )
@@ -228,7 +284,8 @@ def load_config_from_env() -> Config:
     Useful for simple deployments without a YAML file.
 
     Environment variables:
-        SLACK_WEBHOOK_URL: Webhook URL for alerts
+        SLACK_WEBHOOK_URL: Webhook URL for alerts (or use Secret Manager)
+        SLACK_WEBHOOK_SECRET: Secret name in Secret Manager (alternative to SLACK_WEBHOOK_URL)
         MONITORING_BOUNDS: Comma-separated bounds (min_lat,max_lat,min_lon,max_lon)
         MIN_MAGNITUDE: Minimum magnitude to alert on
         LOOKBACK_HOURS: How far back to check
@@ -236,9 +293,23 @@ def load_config_from_env() -> Config:
     Returns:
         Config object from environment
     """
-    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+    # Try to get webhook URL from Secret Manager first, then env var
+    secret_client = _get_secret_manager_client()
+    webhook_url = None
+
+    # Check if user specified a secret name
+    secret_name = os.environ.get("SLACK_WEBHOOK_SECRET", "slack-webhook-url")
+    if secret_client:
+        webhook_url = secret_client.get_secret(secret_name)
+        if webhook_url:
+            logger.info("Using Slack webhook from Secret Manager")
+
+    # Fall back to environment variable
     if not webhook_url:
-        logger.warning("SLACK_WEBHOOK_URL not set")
+        webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+
+    if not webhook_url:
+        logger.warning("SLACK_WEBHOOK_URL not set and no secret found")
         return Config()
 
     bounds = None
@@ -272,9 +343,12 @@ def load_config_from_env() -> Config:
     if bounds:
         regions.append(MonitoringRegion(name="default", bounds=bounds))
 
+    firestore_database = os.environ.get("FIRESTORE_DATABASE")
+
     return Config(
         lookback_hours=lookback_hours,
         monitoring_regions=regions,
         alert_channels=[channel],
         min_fetch_magnitude=min_magnitude,
+        firestore_database=firestore_database,
     )
