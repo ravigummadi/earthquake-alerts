@@ -256,3 +256,57 @@ class TestEarthquakeModel:
         assert eq is not None
 
         assert eq.coordinates == (37.7749, -122.4194)
+
+    def test_has_shakemap_returns_true_when_shakemap_in_types(self):
+        """Should return True when 'shakemap' is in types."""
+        eq = parse_earthquake(SAMPLE_FEATURE)
+        assert eq is not None
+
+        eq_with_shakemap = Earthquake(
+            **{**eq.__dict__, "types": ",origin,shakemap,phase-data,"}
+        )
+        assert eq_with_shakemap.has_shakemap is True
+
+    def test_has_shakemap_returns_false_when_no_shakemap(self):
+        """Should return False when 'shakemap' is not in types."""
+        eq = parse_earthquake(SAMPLE_FEATURE)
+        assert eq is not None
+
+        eq_without_shakemap = Earthquake(
+            **{**eq.__dict__, "types": ",origin,phase-data,"}
+        )
+        assert eq_without_shakemap.has_shakemap is False
+
+    def test_has_shakemap_returns_false_when_types_empty(self):
+        """Should return False when types is empty."""
+        eq = parse_earthquake(SAMPLE_FEATURE)
+        assert eq is not None
+        # Default types is empty string
+        assert eq.has_shakemap is False
+
+
+class TestParseEarthquakeTypes:
+    """Tests for parsing the 'types' property."""
+
+    def test_parses_types_property(self):
+        """Should parse the types property from USGS data."""
+        feature_with_types = {
+            **SAMPLE_FEATURE,
+            "properties": {
+                **SAMPLE_FEATURE["properties"],
+                "types": ",origin,shakemap,phase-data,",
+            },
+        }
+        result = parse_earthquake(feature_with_types)
+
+        assert result is not None
+        assert result.types == ",origin,shakemap,phase-data,"
+        assert result.has_shakemap is True
+
+    def test_types_defaults_to_empty_string(self):
+        """Should default to empty string when types not in response."""
+        result = parse_earthquake(SAMPLE_FEATURE)
+
+        assert result is not None
+        assert result.types == ""
+        assert result.has_shakemap is False
