@@ -26,7 +26,7 @@ SAMPLE_FEATURE = {
     "properties": {
         "mag": 4.2,
         "place": "10km NE of San Francisco, CA",
-        "time": 1703001600000,  # 2023-12-19 12:00:00 UTC
+        "time": 1703001600000,  # 2023-12-19 16:00:00 UTC
         "url": "https://earthquake.usgs.gov/earthquakes/eventpage/nc75095866",
         "felt": 150,
         "alert": "green",
@@ -70,8 +70,8 @@ class TestParseEarthquake:
         result = parse_earthquake(SAMPLE_FEATURE)
 
         assert result is not None
-        # 1703001600000 ms = 2023-12-19 12:00:00 UTC
-        expected_time = datetime(2023, 12, 19, 12, 0, 0, tzinfo=timezone.utc)
+        # 1703001600000 ms = 2023-12-19 16:00:00 UTC
+        expected_time = datetime(2023, 12, 19, 16, 0, 0, tzinfo=timezone.utc)
         assert result.time == expected_time
 
     def test_returns_none_for_missing_magnitude(self):
