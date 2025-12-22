@@ -167,6 +167,14 @@ def format_slack_message(
                     },
                     "url": earthquake.url,
                 },
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "Shakemap",
+                    },
+                    "url": f"https://earthquake.usgs.gov/earthquakes/eventpage/{earthquake.id}/shakemap",
+                },
             ],
         })
 
