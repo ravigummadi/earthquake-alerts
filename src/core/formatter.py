@@ -156,26 +156,31 @@ def format_slack_message(
 
     # Add link to USGS
     if earthquake.url:
+        action_buttons = [
+            {
+                "type": "button",
+                "text": {
+                    "type": "plain_text",
+                    "text": "View on USGS",
+                },
+                "url": earthquake.url,
+            },
+        ]
+
+        # Only add Shakemap button if shakemap data is available
+        if earthquake.has_shakemap:
+            action_buttons.append({
+                "type": "button",
+                "text": {
+                    "type": "plain_text",
+                    "text": "Shakemap",
+                },
+                "url": f"https://earthquake.usgs.gov/earthquakes/eventpage/{earthquake.id}/shakemap",
+            })
+
         blocks.append({
             "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "View on USGS",
-                    },
-                    "url": earthquake.url,
-                },
-                {
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "Shakemap",
-                    },
-                    "url": f"https://earthquake.usgs.gov/earthquakes/eventpage/{earthquake.id}/shakemap",
-                },
-            ],
+            "elements": action_buttons,
         })
 
     blocks.append({"type": "divider"})
