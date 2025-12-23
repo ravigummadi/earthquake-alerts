@@ -30,7 +30,7 @@ LOCALES: dict[str, dict[str, Any]] = {
             max_longitude=-120.71777,
         ),
         "center": {"lat": 37.78, "lng": -121.98},
-        "min_magnitude": 3.0,
+        "min_magnitude": 2.5,
     },
     "bayarea": {
         "name": "Bay Area",
@@ -42,7 +42,7 @@ LOCALES: dict[str, dict[str, Any]] = {
             max_longitude=-120.5,
         ),
         "center": {"lat": 37.77, "lng": -122.42},
-        "min_magnitude": 3.0,
+        "min_magnitude": 2.5,
     },
     "la": {
         "name": "Los Angeles",
@@ -54,7 +54,7 @@ LOCALES: dict[str, dict[str, Any]] = {
             max_longitude=-117.0,
         ),
         "center": {"lat": 34.05, "lng": -118.24},
-        "min_magnitude": 3.0,
+        "min_magnitude": 2.5,
     },
 }
 
