@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Header from "@/components/Header";
 import CountdownTimer from "@/components/CountdownTimer";
 import EarthquakeCard from "@/components/EarthquakeCard";
@@ -33,9 +33,14 @@ export default function LocalePage({ locale }: LocalePageProps) {
   const [earthquake, setEarthquake] = useState<Earthquake | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     async function fetchData() {
+      // Cancel any in-flight request
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = new AbortController();
+
       try {
         setLoading(true);
         setError(null);
@@ -48,7 +53,8 @@ export default function LocalePage({ locale }: LocalePageProps) {
         }
 
         const response = await fetch(
-          `${apiUrl}/api-latest-earthquake?locale=${locale.slug}`
+          `${apiUrl}/api-latest-earthquake?locale=${locale.slug}`,
+          { signal: abortControllerRef.current.signal }
         );
 
         if (!response.ok) {
@@ -58,6 +64,10 @@ export default function LocalePage({ locale }: LocalePageProps) {
         const data: EarthquakeResponse = await response.json();
         setEarthquake(data.latest_earthquake);
       } catch (err) {
+        // Don't update state if request was aborted (component unmounted)
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
         console.error("Error fetching earthquake data:", err);
         setError("Unable to load earthquake data. Using cached data.");
         // Fall back to mock data
@@ -71,7 +81,10 @@ export default function LocalePage({ locale }: LocalePageProps) {
 
     // Refresh data every 5 minutes
     const interval = setInterval(fetchData, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      abortControllerRef.current?.abort();
+    };
   }, [locale.slug]);
 
   return (
@@ -91,10 +104,14 @@ export default function LocalePage({ locale }: LocalePageProps) {
           </section>
 
           {/* Countdown Timer */}
-          <section className="card p-6 md:p-10">
+          <section className="card p-6 md:p-10" aria-label="Earthquake countdown timer">
             {loading ? (
               <div className="h-32 flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
+                <div
+                  className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin"
+                  role="status"
+                  aria-label="Loading earthquake data"
+                />
               </div>
             ) : earthquake ? (
               <CountdownTimer

@@ -1,5 +1,5 @@
 declare module "globe.gl" {
-  interface GlobeInstance {
+  export interface GlobeInstance {
     (element: HTMLElement): GlobeInstance;
 
     // Globe appearance

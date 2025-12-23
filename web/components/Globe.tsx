@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import { getMagnitudeColor, type Earthquake } from "@/lib/api";
+import type { GlobeInstance } from "globe.gl";
 
 interface GlobeProps {
   earthquake: Earthquake | null;
@@ -10,7 +11,8 @@ interface GlobeProps {
 
 export default function Globe({ earthquake, center }: GlobeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const globeRef = useRef<any>(null);
+  const globeRef = useRef<GlobeInstance | null>(null);
+  const mountedRef = useRef(true);
   const [isLoaded, setIsLoaded] = useState(false);
 
   const initGlobe = useCallback(async () => {
@@ -18,6 +20,9 @@ export default function Globe({ earthquake, center }: GlobeProps) {
 
     // Dynamic import for client-side only
     const GlobeGL = (await import("globe.gl")).default;
+
+    // Check if component is still mounted after async import
+    if (!mountedRef.current || !containerRef.current) return;
 
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
@@ -36,12 +41,12 @@ export default function Globe({ earthquake, center }: GlobeProps) {
     // Configure points for earthquake
     globe
       .pointsData(earthquake ? [earthquake] : [])
-      .pointLat((d: any) => d.latitude)
-      .pointLng((d: any) => d.longitude)
+      .pointLat((d: Earthquake) => d.latitude)
+      .pointLng((d: Earthquake) => d.longitude)
       .pointAltitude(0.01)
-      .pointRadius((d: any) => Math.max(0.3, d.magnitude / 10))
-      .pointColor((d: any) => getMagnitudeColor(d.magnitude))
-      .pointLabel((d: any) => `
+      .pointRadius((d: Earthquake) => Math.max(0.3, d.magnitude / 10))
+      .pointColor((d: Earthquake) => getMagnitudeColor(d.magnitude))
+      .pointLabel((d: Earthquake) => `
         <div style="background: rgba(0,0,0,0.8); padding: 8px 12px; border-radius: 8px; color: white;">
           <strong>M${d.magnitude.toFixed(1)}</strong> - ${d.place}
         </div>
@@ -52,8 +57,8 @@ export default function Globe({ earthquake, center }: GlobeProps) {
     if (earthquake) {
       globe
         .ringsData([earthquake])
-        .ringLat((d: any) => d.latitude)
-        .ringLng((d: any) => d.longitude)
+        .ringLat((d: Earthquake) => d.latitude)
+        .ringLng((d: Earthquake) => d.longitude)
         .ringAltitude(0.005)
         .ringColor(() => getMagnitudeColor(earthquake.magnitude))
         .ringMaxRadius(3)
@@ -70,12 +75,14 @@ export default function Globe({ earthquake, center }: GlobeProps) {
   }, [earthquake, center]);
 
   useEffect(() => {
+    mountedRef.current = true;
     initGlobe();
 
     return () => {
+      mountedRef.current = false;
       if (globeRef.current) {
         // Cleanup
-        globeRef.current._destructor && globeRef.current._destructor();
+        globeRef.current._destructor?.();
         globeRef.current = null;
       }
     };
@@ -107,7 +114,14 @@ export default function Globe({ earthquake, center }: GlobeProps) {
   }, [earthquake, isLoaded]);
 
   return (
-    <div className="relative w-full h-full min-h-[300px] md:min-h-[400px]">
+    <div
+      className="relative w-full h-full min-h-[300px] md:min-h-[400px]"
+      role="img"
+      aria-label={earthquake
+        ? `3D globe showing earthquake location: ${earthquake.place}, magnitude ${earthquake.magnitude}`
+        : "3D globe visualization"
+      }
+    >
       <div
         ref={containerRef}
         className="w-full h-full"
@@ -115,7 +129,11 @@ export default function Globe({ earthquake, center }: GlobeProps) {
       />
       {!isLoaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50">
-          <div className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
+          <div
+            className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin"
+            role="status"
+            aria-label="Loading globe visualization"
+          />
         </div>
       )}
     </div>

@@ -23,11 +23,17 @@ export default function CountdownTimer({ earthquakeTime, magnitude }: CountdownT
 
   return (
     <div className="text-center">
-      <p className="text-slate-400 text-sm uppercase tracking-wider mb-4">
+      <p className="text-slate-400 text-sm uppercase tracking-wider mb-4" id="countdown-label">
         Time since last M{magnitude.toFixed(1)}+ earthquake
       </p>
 
-      <div className="flex items-center justify-center gap-2 md:gap-4">
+      <div
+        className="flex items-center justify-center gap-2 md:gap-4"
+        role="timer"
+        aria-labelledby="countdown-label"
+        aria-live="polite"
+        aria-atomic="true"
+      >
         <TimeUnit value={days} label="days" />
         <Separator />
         <TimeUnit value={hours} label="hrs" />
@@ -36,6 +42,10 @@ export default function CountdownTimer({ earthquakeTime, magnitude }: CountdownT
         <Separator />
         <TimeUnit value={seconds} label="sec" />
       </div>
+      {/* Screen reader only text */}
+      <span className="sr-only">
+        {days} days, {hours} hours, {minutes} minutes, {seconds} seconds since last earthquake
+      </span>
     </div>
   );
 }

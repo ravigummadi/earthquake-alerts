@@ -1,6 +1,6 @@
 "use client";
 
-import { getMagnitudeClass, getMagnitudeColor, type Earthquake } from "@/lib/api";
+import { getMagnitudeClass, type Earthquake } from "@/lib/api";
 
 interface EarthquakeCardProps {
   earthquake: Earthquake;

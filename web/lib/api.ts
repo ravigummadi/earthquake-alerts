@@ -55,13 +55,13 @@ export function getTimeSince(isoTimestamp: string): TimeSince {
  */
 export function getMagnitudeClass(magnitude: number): string {
   if (magnitude >= 7.0) {
-    return "magnitude-major";
+    return "magnitude-severe";
   } else if (magnitude >= 5.0) {
-    return "magnitude-moderate";
+    return "magnitude-high";
   } else if (magnitude >= 3.0) {
-    return "magnitude-light";
+    return "magnitude-medium";
   }
-  return "magnitude-minor";
+  return "magnitude-low";
 }
 
 /**

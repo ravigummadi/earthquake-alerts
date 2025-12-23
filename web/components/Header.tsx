@@ -16,12 +16,14 @@ export default function Header({ currentLocale }: HeaderProps) {
         <Link
           href="/"
           className="flex items-center gap-2 text-white hover:text-primary-400 transition-colors"
+          aria-label="earthquake.city home"
         >
           <svg
             className="w-6 h-6 md:w-8 md:h-8"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
+            aria-hidden="true"
           >
             <circle cx="12" cy="12" r="10" strokeWidth="1.5" />
             <path
@@ -34,7 +36,7 @@ export default function Header({ currentLocale }: HeaderProps) {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-1 md:gap-2">
+        <nav className="flex items-center gap-1 md:gap-2" aria-label="Locale selection">
           {locales.map((locale) => (
             <Link
               key={locale.slug}
@@ -44,6 +46,7 @@ export default function Header({ currentLocale }: HeaderProps) {
                   ? "bg-primary-600 text-white"
                   : "text-slate-400 hover:text-white hover:bg-slate-800"
               }`}
+              aria-current={currentLocale === locale.slug ? "page" : undefined}
             >
               {locale.name}
             </Link>
