@@ -173,6 +173,59 @@ gcloud scheduler jobs create http earthquake-monitor-scheduler \
 3. Write unit tests for new rules
 4. No changes to shell needed
 
+## Web Frontend (earthquake.city)
+
+The `web/` directory contains a Next.js 15 application for earthquake.city - a mobile-first landing page with Stripe-like aesthetics.
+
+### Web Architecture
+```
+earthquake.city/[locale]  (e.g., /sanramon, /bayarea, /la)
+         │
+         ▼
+┌─────────────────────────┐
+│   Next.js on Cloud Run  │
+│   - Static generation   │
+│   - ISR for fresh data  │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Cloud Function API     │
+│  /api-latest-earthquake │
+│  - Returns latest quake │
+│  - Per region/locale    │
+└─────────────────────────┘
+```
+
+### Web Stack
+- **Framework**: Next.js 15 (App Router)
+- **Styling**: Tailwind CSS
+- **Globe**: Globe.gl (WebGL 3D visualization)
+- **Hosting**: GCP Cloud Run
+
+### Web Development Commands
+```bash
+cd web
+
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Build and deploy to Cloud Run
+docker build -t earthquake-city --build-arg NEXT_PUBLIC_API_URL=https://... .
+docker push gcr.io/PROJECT/earthquake-city
+gcloud run deploy earthquake-city --image gcr.io/PROJECT/earthquake-city
+```
+
+### API Endpoints (Cloud Function)
+- `api_latest_earthquake?locale=sanramon` - Get latest earthquake for a locale
+- `api_locales` - List all available locales
+
 ## Personal Preferences Applied
 - Always use Functional Core, Imperative Shell pattern
 - Keep shell layer thin
