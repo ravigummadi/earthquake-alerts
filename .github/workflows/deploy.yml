@@ -1,0 +1,84 @@
+name: Deploy to GCP
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PROJECT_ID: gen-lang-client-0579637657
+  REGION: us-central1
+  FUNCTION_NAME: earthquake-monitor
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest responses
+
+      - name: Run tests
+        run: pytest tests/ -v
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for Workload Identity Federation
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Cloud Function
+        run: |
+          gcloud functions deploy ${{ env.FUNCTION_NAME }} \
+            --gen2 \
+            --runtime python311 \
+            --region ${{ env.REGION }} \
+            --source . \
+            --entry-point earthquake_monitor \
+            --trigger-http \
+            --allow-unauthenticated \
+            --memory 256MB \
+            --timeout 60s \
+            --env-vars-file env-vars.yaml
+
+      - name: Verify deployment
+        run: |
+          FUNCTION_URL=$(gcloud functions describe ${{ env.FUNCTION_NAME }} \
+            --region ${{ env.REGION }} \
+            --format='value(serviceConfig.uri)')
+          echo "Function URL: $FUNCTION_URL"
+
+          # Test the function
+          RESPONSE=$(curl -s -X POST "$FUNCTION_URL")
+          echo "Response: $RESPONSE"
+
+          # Check if response contains "status"
+          if echo "$RESPONSE" | grep -q '"status"'; then
+            echo "Deployment verified successfully!"
+          else
+            echo "Deployment verification failed!"
+            exit 1
+          fi

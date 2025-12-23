@@ -21,15 +21,15 @@ def get_magnitude_emoji(magnitude: float) -> str:
     Pure function.
     """
     if magnitude >= 7.0:
-        return ":rotating_light:"  # Major
+        return "🚨"  # Major
     elif magnitude >= 6.0:
-        return ":warning:"  # Strong
+        return "⚠️"  # Strong
     elif magnitude >= 5.0:
-        return ":large_orange_diamond:"  # Moderate
+        return "🔶"  # Moderate
     elif magnitude >= 4.0:
-        return ":small_orange_diamond:"  # Light
+        return "🔸"  # Light
     else:
-        return ":small_blue_diamond:"  # Minor
+        return "🔹"  # Minor
 
 
 def get_severity_label(magnitude: float) -> str:
@@ -89,13 +89,14 @@ def format_slack_message(
     Returns:
         Slack message payload dict
     """
-    emoji = get_magnitude_emoji(earthquake.magnitude)
-    severity = get_severity_label(earthquake.magnitude)
-    pst_time = earthquake.time.astimezone(PST)
-    time_str = pst_time.strftime("%Y-%m-%d %H:%M:%S PST")
+    # Convert earthquake time to Unix timestamp for Slack's local time formatting
+    timestamp = int(earthquake.time.timestamp())
 
-    # Build the main text with @everyone to alert all users
-    text = f"<!everyone> {emoji} *{severity} Earthquake Detected*"
+    # Google Maps link for the location
+    maps_url = f"https://www.google.com/maps?q={earthquake.latitude},{earthquake.longitude}"
+
+    # Build the main text with @everyone
+    text = f"<!everyone> *{earthquake.magnitude:.1f}* - {earthquake.place}"
 
     # Build blocks for rich formatting
     blocks: list[dict[str, Any]] = [
@@ -103,54 +104,32 @@ def format_slack_message(
             "type": "header",
             "text": {
                 "type": "plain_text",
-                "text": f"{emoji} {severity} Earthquake Detected",
+                "text": f"{earthquake.magnitude:.1f}",
             },
         },
         {
             "type": "section",
-            "fields": [
-                {
-                    "type": "mrkdwn",
-                    "text": f"*Magnitude:*\n{earthquake.magnitude:.1f} {earthquake.mag_type.upper()}",
-                },
-                {
-                    "type": "mrkdwn",
-                    "text": f"*Severity:*\n{severity}",
-                },
-                {
-                    "type": "mrkdwn",
-                    "text": f"*Location:*\n{earthquake.place}",
-                },
-                {
-                    "type": "mrkdwn",
-                    "text": f"*Depth:*\n{earthquake.depth_km:.1f} km",
-                },
-                {
-                    "type": "mrkdwn",
-                    "text": f"*Time:*\n{time_str}",
-                },
-                {
-                    "type": "mrkdwn",
-                    "text": f"*Coordinates:*\n{earthquake.latitude:.4f}, {earthquake.longitude:.4f}",
-                },
-            ],
+            "text": {
+                "type": "mrkdwn",
+                "text": f"<{maps_url}|{earthquake.place}> at <!date^{timestamp}^{{time}}|{earthquake.time.strftime('%H:%M')}>",
+            },
         },
     ]
 
     # Add special alerts
     special_alerts = []
     if earthquake.tsunami:
-        special_alerts.append(":ocean: *TSUNAMI WARNING ISSUED*")
+        special_alerts.append("🌊 *TSUNAMI WARNING ISSUED*")
     if earthquake.alert:
         alert_emoji = {
-            "green": ":green_circle:",
-            "yellow": ":yellow_circle:",
-            "orange": ":orange_circle:",
-            "red": ":red_circle:",
-        }.get(earthquake.alert, ":white_circle:")
+            "green": "🟢",
+            "yellow": "🟡",
+            "orange": "🟠",
+            "red": "🔴",
+        }.get(earthquake.alert, "⚪")
         special_alerts.append(f"{alert_emoji} PAGER Alert Level: {earthquake.alert.upper()}")
     if earthquake.felt:
-        special_alerts.append(f":busts_in_silhouette: Felt by {earthquake.felt} people")
+        special_alerts.append(f"👥 Felt by {earthquake.felt} people")
 
     if special_alerts:
         blocks.append({
@@ -177,18 +156,31 @@ def format_slack_message(
 
     # Add link to USGS
     if earthquake.url:
+        action_buttons = [
+            {
+                "type": "button",
+                "text": {
+                    "type": "plain_text",
+                    "text": "View on USGS",
+                },
+                "url": earthquake.url,
+            },
+        ]
+
+        # Only add Shakemap button if shakemap data is available
+        if earthquake.has_shakemap:
+            action_buttons.append({
+                "type": "button",
+                "text": {
+                    "type": "plain_text",
+                    "text": "Shakemap",
+                },
+                "url": f"https://earthquake.usgs.gov/earthquakes/eventpage/{earthquake.id}/shakemap",
+            })
+
         blocks.append({
             "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "View on USGS",
-                    },
-                    "url": earthquake.url,
-                },
-            ],
+            "elements": action_buttons,
         })
 
     blocks.append({"type": "divider"})
@@ -219,7 +211,7 @@ def format_batch_summary(earthquakes: list[Earthquake]) -> dict[str, Any]:
     count = len(earthquakes)
     max_mag = max(e.magnitude for e in earthquakes)
 
-    text = f":earthquake: {count} earthquake(s) detected, max magnitude {max_mag:.1f}"
+    text = f"🌍 {count} earthquake(s) detected, max magnitude {max_mag:.1f}"
 
     blocks: list[dict[str, Any]] = [
         {

@@ -26,6 +26,7 @@ class Earthquake:
         alert: PAGER alert level (green/yellow/orange/red) (optional)
         tsunami: Whether tsunami warning was issued
         mag_type: Magnitude type (e.g., 'ml', 'md', 'mb')
+        types: Comma-separated list of available product types (e.g., 'shakemap,origin')
     """
     id: str
     magnitude: float
@@ -39,11 +40,17 @@ class Earthquake:
     alert: str | None = None
     tsunami: bool = False
     mag_type: str = "ml"
+    types: str = ""
 
     @property
     def coordinates(self) -> tuple[float, float]:
         """Return (latitude, longitude) tuple."""
         return (self.latitude, self.longitude)
+
+    @property
+    def has_shakemap(self) -> bool:
+        """Check if ShakeMap data is available for this earthquake."""
+        return "shakemap" in self.types
 
 
 def parse_earthquake(feature: dict[str, Any]) -> Earthquake | None:
@@ -89,6 +96,7 @@ def parse_earthquake(feature: dict[str, Any]) -> Earthquake | None:
             alert=props.get("alert"),
             tsunami=bool(props.get("tsunami", 0)),
             mag_type=props.get("magType", "ml"),
+            types=props.get("types", ""),
         )
     except (KeyError, TypeError, ValueError):
         return None

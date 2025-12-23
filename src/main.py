@@ -14,6 +14,7 @@ from flask import Request
 
 from src.orchestrator import Orchestrator
 from src.shell.config_loader import load_config, load_config_from_env
+from src.api_handler import get_latest_earthquake, get_locales
 
 
 # Configure logging
@@ -135,6 +136,22 @@ def earthquake_monitor_pubsub(cloud_event: Any) -> None:
     except Exception as e:
         logger.exception("Unexpected error in earthquake monitor")
         raise
+
+
+@functions_framework.http
+def api_latest_earthquake(request: Request):
+    """API endpoint: Get latest earthquake for a locale.
+
+    Query params:
+        locale: URL slug (e.g., "sanramon", "bayarea", "la")
+    """
+    return get_latest_earthquake(request)
+
+
+@functions_framework.http
+def api_locales(request: Request):
+    """API endpoint: List all available locales."""
+    return get_locales(request)
 
 
 # For local testing

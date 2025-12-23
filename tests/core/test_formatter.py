@@ -41,24 +41,24 @@ class TestGetMagnitudeEmoji:
     """Tests for get_magnitude_emoji() function."""
 
     def test_major_earthquake(self):
-        """M7+ should get rotating light."""
-        assert get_magnitude_emoji(7.5) == ":rotating_light:"
+        """M7+ should get alert emoji."""
+        assert get_magnitude_emoji(7.5) == "🚨"
 
     def test_strong_earthquake(self):
-        """M6+ should get warning."""
-        assert get_magnitude_emoji(6.2) == ":warning:"
+        """M6+ should get warning emoji."""
+        assert get_magnitude_emoji(6.2) == "⚠️"
 
     def test_moderate_earthquake(self):
         """M5+ should get large orange diamond."""
-        assert get_magnitude_emoji(5.5) == ":large_orange_diamond:"
+        assert get_magnitude_emoji(5.5) == "🔶"
 
     def test_light_earthquake(self):
         """M4+ should get small orange diamond."""
-        assert get_magnitude_emoji(4.5) == ":small_orange_diamond:"
+        assert get_magnitude_emoji(4.5) == "🔸"
 
     def test_minor_earthquake(self):
         """Below M4 should get small blue diamond."""
-        assert get_magnitude_emoji(3.0) == ":small_blue_diamond:"
+        assert get_magnitude_emoji(3.0) == "🔹"
 
 
 class TestGetSeverityLabel:
@@ -117,7 +117,8 @@ class TestFormatSlackMessage:
         """Should return dict with text field."""
         result = format_slack_message(sample_earthquake)
         assert "text" in result
-        assert "Earthquake" in result["text"]
+        assert "4.5" in result["text"]  # Magnitude in text
+        assert "San Francisco" in result["text"]  # Location in text
 
     def test_returns_blocks(self, sample_earthquake):
         """Should return Slack blocks for rich formatting."""
@@ -129,9 +130,8 @@ class TestFormatSlackMessage:
         """Blocks should include magnitude."""
         result = format_slack_message(sample_earthquake)
 
-        # Find section with fields
-        sections = [b for b in result["blocks"] if b.get("type") == "section"]
-        all_text = str(sections)
+        # Magnitude is in the header block
+        all_text = str(result["blocks"])
         assert "4.5" in all_text
 
     def test_includes_felt_when_present(self, sample_earthquake):
@@ -157,6 +157,32 @@ class TestFormatSlackMessage:
         actions = [b for b in result["blocks"] if b.get("type") == "actions"]
         assert len(actions) > 0
         assert "earthquake.usgs.gov" in str(actions)
+
+    def test_includes_shakemap_button_when_available(self, sample_earthquake):
+        """Should include Shakemap button when shakemap is available."""
+        quake_with_shakemap = Earthquake(
+            **{**sample_earthquake.__dict__, "types": ",origin,shakemap,phase-data,"}
+        )
+        result = format_slack_message(quake_with_shakemap)
+
+        # Find action block with buttons
+        actions = [b for b in result["blocks"] if b.get("type") == "actions"]
+        assert len(actions) > 0
+        action_str = str(actions)
+        assert "Shakemap" in action_str
+        assert "/shakemap" in action_str
+
+    def test_excludes_shakemap_button_when_not_available(self, sample_earthquake):
+        """Should not include Shakemap button when shakemap is not available."""
+        # sample_earthquake has no types, so no shakemap
+        result = format_slack_message(sample_earthquake)
+
+        # Find action block with buttons
+        actions = [b for b in result["blocks"] if b.get("type") == "actions"]
+        assert len(actions) > 0
+        action_str = str(actions)
+        assert "View on USGS" in action_str
+        assert "Shakemap" not in action_str
 
     def test_includes_nearby_pois(self, sample_earthquake):
         """Should include nearby POIs when provided."""

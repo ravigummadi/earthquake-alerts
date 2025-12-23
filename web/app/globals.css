@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-slate-950 text-white;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-slate-900/50 backdrop-blur-xl border border-slate-800/50 rounded-2xl;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent;
+  }
+
+  .magnitude-badge {
+    @apply inline-flex items-center justify-center font-mono font-bold rounded-lg px-3 py-1;
+  }
+
+  .magnitude-low {
+    @apply bg-green-500/20 text-green-400 border border-green-500/30;
+  }
+
+  .magnitude-medium {
+    @apply bg-yellow-500/20 text-yellow-400 border border-yellow-500/30;
+  }
+
+  .magnitude-high {
+    @apply bg-orange-500/20 text-orange-400 border border-orange-500/30;
+  }
+
+  .magnitude-severe {
+    @apply bg-red-500/20 text-red-400 border border-red-500/30;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
