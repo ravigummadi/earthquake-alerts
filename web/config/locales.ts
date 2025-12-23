@@ -28,7 +28,7 @@ export const LOCALES: Record<string, LocaleConfig> = {
       maxLongitude: -120.71777,
     },
     center: { lat: 37.78, lng: -121.98 },
-    minMagnitude: 3.0,
+    minMagnitude: 2.5,
     timezone: "America/Los_Angeles",
   },
   bayarea: {
@@ -42,7 +42,7 @@ export const LOCALES: Record<string, LocaleConfig> = {
       maxLongitude: -120.5,
     },
     center: { lat: 37.77, lng: -122.42 },
-    minMagnitude: 3.0,
+    minMagnitude: 2.5,
     timezone: "America/Los_Angeles",
   },
   la: {
@@ -56,7 +56,7 @@ export const LOCALES: Record<string, LocaleConfig> = {
       maxLongitude: -117.0,
     },
     center: { lat: 34.05, lng: -118.24 },
-    minMagnitude: 3.0,
+    minMagnitude: 2.5,
     timezone: "America/Los_Angeles",
   },
 };
