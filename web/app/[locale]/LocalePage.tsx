@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Header from "@/components/Header";
 import CountdownTimer from "@/components/CountdownTimer";
 import EarthquakeCard from "@/components/EarthquakeCard";
-import GlobeWrapper from "@/components/GlobeWrapper";
+import MapWrapper from "@/components/MapWrapper";
 import { type LocaleConfig } from "@/config/locales";
 import { type Earthquake, type EarthquakeResponse } from "@/lib/api";
 
@@ -130,10 +130,10 @@ export default function LocalePage({ locale }: LocalePageProps) {
             )}
           </section>
 
-          {/* Globe and Details Grid */}
+          {/* Map and Details Grid */}
           <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-            {/* Globe */}
-            <GlobeWrapper
+            {/* Map */}
+            <MapWrapper
               earthquake={earthquake}
               center={locale.center}
             />
