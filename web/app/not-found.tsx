@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { getAllLocales } from "@/config/locales";
+import { fetchLocales } from "@/lib/api";
 
-export default function NotFound() {
-  const locales = getAllLocales();
+export default async function NotFound() {
+  const locales = await fetchLocales();
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4">
@@ -38,7 +38,7 @@ export default function NotFound() {
               className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg
                          font-medium transition-colors"
             >
-              {locale.displayName}
+              {locale.display_name}
             </Link>
           ))}
         </div>

@@ -1,6 +1,9 @@
 // API base URL - hardcoded since NEXT_PUBLIC_* env vars need build-time availability
 export const API_BASE_URL = "https://us-central1-gen-lang-client-0579637657.cloudfunctions.net";
 
+// Refresh interval for earthquake data (5 minutes)
+export const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
 export interface Earthquake {
   id: string;
   magnitude: number;
@@ -17,10 +20,92 @@ export interface Earthquake {
   has_shakemap: boolean;
 }
 
+export interface Region {
+  slug: string;
+  name: string;
+  display_name: string;
+  bounds: {
+    min_latitude: number;
+    max_latitude: number;
+    min_longitude: number;
+    max_longitude: number;
+  };
+  center: { lat: number; lng: number };
+}
+
 export interface EarthquakeResponse {
-  locale: string;
+  region: Region;
+  min_magnitude_filter: number;
   latest_earthquake: Earthquake | null;
-  updated_at: string;
+  fetched_at: string;
+}
+
+export interface LocaleConfig {
+  slug: string;
+  name: string;
+  display_name: string;
+  bounds: {
+    min_latitude: number;
+    max_latitude: number;
+    min_longitude: number;
+    max_longitude: number;
+  };
+  center: { lat: number; lng: number };
+  min_magnitude: number;
+}
+
+export interface LocalesResponse {
+  locales: LocaleConfig[];
+}
+
+// Fallback locale data for build time when API is unavailable
+const FALLBACK_LOCALES: LocaleConfig[] = [
+  {
+    slug: "sanramon",
+    name: "San Ramon",
+    display_name: "San Ramon, CA",
+    bounds: { min_latitude: 35.9024, max_latitude: 39.18543, min_longitude: -122.92603, max_longitude: -120.71777 },
+    center: { lat: 37.78, lng: -121.98 },
+    min_magnitude: 2.5,
+  },
+  {
+    slug: "bayarea",
+    name: "Bay Area",
+    display_name: "San Francisco Bay Area",
+    bounds: { min_latitude: 35.9024, max_latitude: 39.18543, min_longitude: -123.5, max_longitude: -120.5 },
+    center: { lat: 37.77, lng: -122.42 },
+    min_magnitude: 2.5,
+  },
+  {
+    slug: "la",
+    name: "Los Angeles",
+    display_name: "Los Angeles, CA",
+    bounds: { min_latitude: 33.5, max_latitude: 34.8, min_longitude: -119.0, max_longitude: -117.0 },
+    center: { lat: 34.05, lng: -118.24 },
+    min_magnitude: 2.5,
+  },
+];
+
+/**
+ * Fetch all available locales from the API.
+ * Falls back to static data during build when API is unavailable.
+ */
+export async function fetchLocales(): Promise<LocaleConfig[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api-locales`, {
+      next: { revalidate: 3600 }, // Cache for 1 hour
+    });
+    if (!response.ok) {
+      console.warn("API unavailable, using fallback locale data");
+      return FALLBACK_LOCALES;
+    }
+    const data: LocalesResponse = await response.json();
+    return data.locales;
+  } catch {
+    // During build or when API is down, use fallback
+    console.warn("Failed to fetch locales, using fallback data");
+    return FALLBACK_LOCALES;
+  }
 }
 
 export interface TimeSince {

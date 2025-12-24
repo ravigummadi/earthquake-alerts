@@ -1,14 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { getAllLocales } from "@/config/locales";
+import { useRouter } from "next/navigation";
+
+interface LocaleNav {
+  slug: string;
+  name: string;
+}
 
 interface HeaderProps {
   currentLocale: string;
+  locales?: LocaleNav[];
 }
 
-export default function Header({ currentLocale }: HeaderProps) {
-  const locales = getAllLocales();
+// Fallback for initial render before API data loads
+const DEFAULT_LOCALES: LocaleNav[] = [
+  { slug: "sanramon", name: "San Ramon" },
+  { slug: "bayarea", name: "Bay Area" },
+  { slug: "la", name: "Los Angeles" },
+];
+
+export default function Header({ currentLocale, locales = DEFAULT_LOCALES }: HeaderProps) {
+  const router = useRouter();
+
+  const handleLocaleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    router.push(`/${e.target.value}`);
+  };
 
   return (
     <header className="w-full py-4 px-4 md:px-6">
@@ -36,22 +53,32 @@ export default function Header({ currentLocale }: HeaderProps) {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-1 md:gap-2" aria-label="Locale selection">
-          {locales.map((locale) => (
-            <Link
-              key={locale.slug}
-              href={`/${locale.slug}`}
-              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                currentLocale === locale.slug
-                  ? "bg-primary-600 text-white"
-                  : "text-slate-400 hover:text-white hover:bg-slate-800"
-              }`}
-              aria-current={currentLocale === locale.slug ? "page" : undefined}
-            >
-              {locale.name}
-            </Link>
-          ))}
-        </nav>
+        <div className="relative">
+          <select
+            value={currentLocale}
+            onChange={handleLocaleChange}
+            aria-label="Select location"
+            className="appearance-none bg-slate-800/50 border border-slate-700 text-white text-sm
+                       rounded-lg pl-3 pr-8 py-2 cursor-pointer
+                       hover:bg-slate-700/50 hover:border-slate-600
+                       focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                       transition-colors"
+          >
+            {locales.map((locale) => (
+              <option key={locale.slug} value={locale.slug}>
+                {locale.name}
+              </option>
+            ))}
+          </select>
+          <svg
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
       </div>
     </header>
   );

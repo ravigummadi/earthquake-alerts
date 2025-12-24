@@ -5,18 +5,42 @@ import Header from "@/components/Header";
 import CountdownTimer from "@/components/CountdownTimer";
 import EarthquakeCard from "@/components/EarthquakeCard";
 import MapWrapper from "@/components/MapWrapper";
-import { type LocaleConfig } from "@/config/locales";
-import { type Earthquake, type EarthquakeResponse, API_BASE_URL } from "@/lib/api";
+import {
+  type Earthquake,
+  type EarthquakeResponse,
+  type Region,
+  type LocaleConfig,
+  API_BASE_URL,
+  REFRESH_INTERVAL_MS,
+} from "@/lib/api";
 
 interface LocalePageProps {
-  locale: LocaleConfig;
+  localeSlug: string;
+  initialDisplayName: string;
+  initialCenter: { lat: number; lng: number };
+  initialMinMagnitude: number;
+  allLocales: LocaleConfig[];
 }
 
-export default function LocalePage({ locale }: LocalePageProps) {
+export default function LocalePage({
+  localeSlug,
+  initialDisplayName,
+  initialCenter,
+  initialMinMagnitude,
+  allLocales,
+}: LocalePageProps) {
+  // Transform locales for Header navigation
+  const headerLocales = allLocales.map((l) => ({ slug: l.slug, name: l.name }));
   const [earthquake, setEarthquake] = useState<Earthquake | null>(null);
+  const [region, setRegion] = useState<Region | null>(null);
+  const [minMagnitude, setMinMagnitude] = useState(initialMinMagnitude);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Use region data from API once loaded, fallback to initial props
+  const displayName = region?.display_name ?? initialDisplayName;
+  const center = region?.center ?? initialCenter;
 
   useEffect(() => {
     async function fetchData() {
@@ -29,7 +53,7 @@ export default function LocalePage({ locale }: LocalePageProps) {
         setError(null);
 
         const response = await fetch(
-          `${API_BASE_URL}/api-latest-earthquake?locale=${locale.slug}`,
+          `${API_BASE_URL}/api-latest-earthquake?locale=${localeSlug}`,
           { signal: abortControllerRef.current.signal }
         );
 
@@ -39,6 +63,8 @@ export default function LocalePage({ locale }: LocalePageProps) {
 
         const data: EarthquakeResponse = await response.json();
         setEarthquake(data.latest_earthquake);
+        setRegion(data.region);
+        setMinMagnitude(data.min_magnitude_filter);
       } catch (err) {
         // Don't update state if request was aborted (component unmounted)
         if (err instanceof Error && err.name === "AbortError") {
@@ -53,24 +79,23 @@ export default function LocalePage({ locale }: LocalePageProps) {
 
     fetchData();
 
-    // Refresh data every 5 minutes
-    const interval = setInterval(fetchData, 5 * 60 * 1000);
+    const interval = setInterval(fetchData, REFRESH_INTERVAL_MS);
     return () => {
       clearInterval(interval);
       abortControllerRef.current?.abort();
     };
-  }, [locale.slug]);
+  }, [localeSlug]);
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Header currentLocale={locale.slug} />
+      <Header currentLocale={localeSlug} locales={headerLocales} />
 
       <main className="flex-1 px-4 md:px-6 py-8 md:py-12">
         <div className="max-w-6xl mx-auto space-y-8 md:space-y-12">
           {/* Hero Section */}
           <section className="text-center space-y-4">
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white">
-              {locale.displayName}
+              {displayName}
             </h1>
             <p className="text-slate-400 text-lg max-w-2xl mx-auto">
               Real-time earthquake monitoring powered by USGS data
@@ -90,15 +115,15 @@ export default function LocalePage({ locale }: LocalePageProps) {
             ) : earthquake ? (
               <CountdownTimer
                 earthquakeTime={earthquake.time}
-                magnitude={locale.minMagnitude}
+                magnitude={minMagnitude}
               />
             ) : (
               <div className="text-center py-8">
                 <p className="text-slate-400">
-                  No earthquakes M{locale.minMagnitude}+ in the past 30 days
+                  No earthquakes M{minMagnitude}+ in the past 30 days
                 </p>
                 <p className="text-green-400 text-lg font-medium mt-2">
-                  All quiet in {locale.name}
+                  All quiet in {region?.name ?? displayName}
                 </p>
               </div>
             )}
@@ -109,7 +134,7 @@ export default function LocalePage({ locale }: LocalePageProps) {
             {/* Map */}
             <MapWrapper
               earthquake={earthquake}
-              center={locale.center}
+              center={center}
             />
 
             {/* Earthquake Details */}

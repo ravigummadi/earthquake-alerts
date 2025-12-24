@@ -205,7 +205,7 @@ def get_locales(request: Request) -> Response:
     """API endpoint: List all available locales.
 
     Returns:
-        JSON with list of available locales
+        JSON with list of available locales (full config for frontend)
     """
     origin = request.headers.get("Origin")
 
@@ -220,7 +220,9 @@ def get_locales(request: Request) -> Response:
             "slug": slug,
             "name": config["name"],
             "display_name": config["display_name"],
+            "bounds": _bounds_to_dict(config["bounds"]),
             "center": config["center"],
+            "min_magnitude": config["min_magnitude"],
         }
         for slug, config in LOCALES.items()
     ]
