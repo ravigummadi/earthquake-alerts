@@ -34,13 +34,29 @@ points_of_interest:
 
 # Notification channels with their alert rules
 alert_channels:
-  # All earthquakes in the San Ramon Area
+  # All earthquakes in the San Ramon Area - Slack
   - name: "earthquake-alerts"
     type: slack
     # Webhook URL is securely stored in Secret Manager
     webhook_url: "${secret:slack-webhook-url}"
     rules:
       min_magnitude: 2.5
+      bounds:
+        min_latitude: 37.3
+        max_latitude: 38.3
+        min_longitude: -122.5
+        max_longitude: -121.5
+
+  # Twitter/X public alerts - @quake_alerts
+  - name: "quake-alerts-twitter"
+    type: twitter
+    credentials:
+      api_key: "${secret:twitter-api-key}"
+      api_secret: "${secret:twitter-api-secret}"
+      access_token: "${secret:twitter-access-token}"
+      access_token_secret: "${secret:twitter-access-token-secret}"
+    rules:
+      min_magnitude: 3.0
       bounds:
         min_latitude: 37.3
         max_latitude: 38.3
