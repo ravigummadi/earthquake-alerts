@@ -96,3 +96,22 @@ alert_channels:
         max_latitude: 39.18543
         min_longitude: -122.92603
         max_longitude: -120.71777
+
+  # WhatsApp alerts via Twilio
+  # Requires Twilio account with WhatsApp enabled (https://www.twilio.com/whatsapp)
+  - name: "earthquake-whatsapp"
+    type: whatsapp
+    credentials:
+      account_sid: "${secret:twilio-account-sid}"
+      auth_token: "${secret:twilio-auth-token}"
+      from_number: "+14155238886"  # Twilio WhatsApp sandbox or your number
+      to_numbers:
+        - "+1234567890"  # Recipient phone numbers
+        - "+0987654321"
+    rules:
+      min_magnitude: 4.0
+      bounds:
+        min_latitude: 35.9024
+        max_latitude: 39.18543
+        min_longitude: -122.92603
+        max_longitude: -120.71777

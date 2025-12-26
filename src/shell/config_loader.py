@@ -134,25 +134,36 @@ def _parse_channel(
     - Slack channels: use webhook_url
     - Twitter channels: use credentials dict with api_key, api_secret,
                        access_token, access_token_secret
+    - WhatsApp channels: use credentials dict with account_sid, auth_token,
+                        from_number, and to_numbers list
     """
     channel_type = data.get("type", "slack")
     rules_data = data.get("rules", {})
 
-    # Parse webhook_url (used by Slack, optional for Twitter)
+    # Parse webhook_url (used by Slack, optional for others)
     webhook_url = ""
     if "webhook_url" in data:
         webhook_url = _resolve_value(data["webhook_url"], secret_client)
 
-    # Parse credentials (used by Twitter and other OAuth channels)
+    # Parse credentials (used by Twitter, WhatsApp, and other OAuth channels)
     credentials = None
     if "credentials" in data:
         creds_data = data["credentials"]
-        resolved_creds = {
-            key: _resolve_value(value, secret_client)
-            for key, value in creds_data.items()
-        }
+        resolved_creds = {}
+        for key, value in creds_data.items():
+            if isinstance(value, list):
+                # Handle lists (e.g., to_numbers for WhatsApp)
+                resolved_creds[key] = [
+                    _resolve_value(v, secret_client) for v in value
+                ]
+            else:
+                resolved_creds[key] = _resolve_value(value, secret_client)
         # Convert to tuple of tuples for frozen dataclass compatibility
-        credentials = tuple(sorted(resolved_creds.items()))
+        # Lists are converted to tuples
+        credentials = tuple(
+            (k, tuple(v) if isinstance(v, list) else v)
+            for k, v in sorted(resolved_creds.items())
+        )
 
     return AlertChannel(
         name=data["name"],

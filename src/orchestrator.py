@@ -10,7 +10,12 @@ from dataclasses import dataclass
 
 from src.core.earthquake import Earthquake, parse_earthquakes
 from src.core.dedup import filter_already_alerted, compute_ids_to_store
-from src.core.formatter import format_slack_message, format_twitter_message, get_nearby_pois
+from src.core.formatter import (
+    format_slack_message,
+    format_twitter_message,
+    format_whatsapp_message,
+    get_nearby_pois,
+)
 from src.core.rules import AlertChannel, make_alert_decisions, AlertDecision
 from src.core.geo import BoundingBox, combine_bounds
 
@@ -18,6 +23,7 @@ from src.core.config import Config
 from src.shell.usgs_client import USGSClient
 from src.shell.slack_client import SlackClient
 from src.shell.twitter_client import TwitterClient, TwitterCredentials
+from src.shell.whatsapp_client import WhatsAppClient, WhatsAppCredentials
 from src.shell.firestore_client import FirestoreClient, FirestoreConfig
 
 
@@ -82,6 +88,7 @@ class Orchestrator:
     - Firestore client (deduplication state)
     - Slack client (sending Slack notifications)
     - Twitter client (sending tweets)
+    - WhatsApp client (sending WhatsApp messages via Twilio)
     """
 
     def __init__(
@@ -90,6 +97,7 @@ class Orchestrator:
         usgs_client: USGSClient | None = None,
         slack_client: SlackClient | None = None,
         twitter_client: TwitterClient | None = None,
+        whatsapp_client: WhatsAppClient | None = None,
         firestore_client: FirestoreClient | None = None,
     ) -> None:
         """Initialize orchestrator with configuration.
@@ -99,12 +107,14 @@ class Orchestrator:
             usgs_client: USGS client (created if not provided)
             slack_client: Slack client (created if not provided)
             twitter_client: Twitter client (created if not provided)
+            whatsapp_client: WhatsApp client (created if not provided)
             firestore_client: Firestore client (created if not provided)
         """
         self.config = config
         self.usgs_client = usgs_client or USGSClient()
         self.slack_client = slack_client or SlackClient()
         self.twitter_client = twitter_client or TwitterClient()
+        self.whatsapp_client = whatsapp_client or WhatsAppClient()
         self.firestore_client = firestore_client or FirestoreClient(
             FirestoreConfig(
                 database=config.firestore_database,
@@ -163,6 +173,8 @@ class Orchestrator:
         # Route based on channel type
         if channel.channel_type == "twitter":
             return self._send_twitter_alert(earthquake, channel, nearby_pois)
+        elif channel.channel_type == "whatsapp":
+            return self._send_whatsapp_alert(earthquake, channel, nearby_pois)
         else:
             # Default to Slack
             return self._send_slack_alert(earthquake, channel, nearby_pois)
@@ -244,6 +256,74 @@ class Orchestrator:
             channel=channel,
             success=response.success,
             error=response.error,
+        )
+
+    def _send_whatsapp_alert(
+        self,
+        earthquake: Earthquake,
+        channel: AlertChannel,
+        nearby_pois: list[tuple],
+    ) -> AlertResult:
+        """Send an alert via WhatsApp (Twilio)."""
+        # Check for credentials
+        if not channel.credentials:
+            return AlertResult(
+                earthquake=earthquake,
+                channel=channel,
+                success=False,
+                error="WhatsApp channel missing credentials",
+            )
+
+        # Convert credentials tuple to WhatsAppCredentials
+        creds_dict = dict(channel.credentials)
+        try:
+            whatsapp_creds = WhatsAppCredentials(
+                account_sid=creds_dict["account_sid"],
+                auth_token=creds_dict["auth_token"],
+                from_number=creds_dict["from_number"],
+            )
+            # to_numbers is a tuple (converted from list in config)
+            to_numbers = creds_dict.get("to_numbers", ())
+            if isinstance(to_numbers, str):
+                to_numbers = (to_numbers,)
+        except KeyError as e:
+            return AlertResult(
+                earthquake=earthquake,
+                channel=channel,
+                success=False,
+                error=f"WhatsApp credentials missing key: {e}",
+            )
+
+        if not to_numbers:
+            return AlertResult(
+                earthquake=earthquake,
+                channel=channel,
+                success=False,
+                error="WhatsApp channel has no recipients (to_numbers)",
+            )
+
+        # Format message (pure core function)
+        message_text = format_whatsapp_message(
+            earthquake,
+            nearby_pois=nearby_pois,
+        )
+
+        # Send to all recipients
+        responses = self.whatsapp_client.send_to_group(
+            message_text,
+            list(to_numbers),
+            whatsapp_creds,
+        )
+
+        # Consider success if at least one message was sent
+        any_success = any(r.success for r in responses)
+        errors = [r.error for r in responses if r.error]
+
+        return AlertResult(
+            earthquake=earthquake,
+            channel=channel,
+            success=any_success,
+            error="; ".join(errors) if errors else None,
         )
 
     def _process_decision(self, decision: AlertDecision) -> list[AlertResult]:

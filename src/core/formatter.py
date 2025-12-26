@@ -357,3 +357,72 @@ def format_twitter_message(
             tweet = tweet[:277] + "..."
 
     return tweet
+
+
+def format_whatsapp_message(
+    earthquake: Earthquake,
+    nearby_pois: list[tuple[PointOfInterest, float]] | None = None,
+) -> str:
+    """Format an earthquake as a WhatsApp message.
+
+    Pure function.
+
+    WhatsApp supports longer messages and emojis, so we include more detail
+    than Twitter but keep it concise for mobile readability.
+
+    Args:
+        earthquake: Earthquake to format
+        nearby_pois: Optional list of (POI, distance_km) tuples
+
+    Returns:
+        WhatsApp message text
+    """
+    emoji = get_magnitude_emoji(earthquake.magnitude)
+    severity = get_severity_label(earthquake.magnitude)
+
+    lines = []
+
+    # Header with emoji and magnitude
+    lines.append(f"{emoji} *{severity} Earthquake*")
+    lines.append("")
+
+    # Main info
+    lines.append(f"*Magnitude:* {earthquake.magnitude:.1f}")
+    lines.append(f"*Location:* {earthquake.place}")
+    lines.append(f"*Depth:* {earthquake.depth_km:.1f} km")
+
+    # Time in PST
+    pst_time = earthquake.time.astimezone(PST)
+    time_str = pst_time.strftime("%b %d, %Y at %I:%M %p PST")
+    lines.append(f"*Time:* {time_str}")
+
+    # Special alerts
+    if earthquake.tsunami:
+        lines.append("")
+        lines.append("🌊 *TSUNAMI WARNING ISSUED*")
+
+    if earthquake.alert:
+        alert_emoji = {
+            "green": "🟢",
+            "yellow": "🟡",
+            "orange": "🟠",
+            "red": "🔴",
+        }.get(earthquake.alert, "⚪")
+        lines.append(f"{alert_emoji} PAGER Alert: {earthquake.alert.upper()}")
+
+    if earthquake.felt and earthquake.felt >= 10:
+        lines.append(f"👥 Felt by {earthquake.felt:,} people")
+
+    # Nearby POIs
+    if nearby_pois:
+        lines.append("")
+        lines.append("*Nearby Locations:*")
+        for poi, distance in nearby_pois[:3]:  # Limit to 3
+            lines.append(f"• {poi.name}: {distance:.1f} km away")
+
+    # USGS link
+    if earthquake.url:
+        lines.append("")
+        lines.append(f"🔗 {earthquake.url}")
+
+    return "\n".join(lines)
