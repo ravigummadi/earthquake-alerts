@@ -178,6 +178,16 @@ def format_slack_message(
                 "url": f"https://earthquake.usgs.gov/earthquakes/eventpage/{earthquake.id}/shakemap",
             })
 
+        # Add earthquake.city link
+        action_buttons.append({
+            "type": "button",
+            "text": {
+                "type": "plain_text",
+                "text": "earthquake.city",
+            },
+            "url": "https://earthquake.city/sanramon",
+        })
+
         blocks.append({
             "type": "actions",
             "elements": action_buttons,
@@ -333,17 +343,28 @@ def format_twitter_message(
 
     lines.append(" | ".join(info_parts))
 
-    # Line 4: USGS link (if space allows)
+    # Line 4: Links (if space allows)
     usgs_link = earthquake.url or ""
+    city_link = "https://earthquake.city/sanramon"
 
     # Build tweet and check length
     tweet = "\n".join(lines)
 
-    # Add link if it fits
-    if usgs_link:
-        tweet_with_link = f"{tweet}\n{usgs_link}"
-        if len(tweet_with_link) <= 280:
-            tweet = tweet_with_link
+    # Add links if they fit (prioritize earthquake.city as it's shorter)
+    tweet_with_city = f"{tweet}\n{city_link}"
+    if len(tweet_with_city) <= 280:
+        tweet = tweet_with_city
+        # Try to add USGS link too
+        if usgs_link:
+            tweet_with_both = f"{tweet}\n{usgs_link}"
+            if len(tweet_with_both) <= 280:
+                tweet = tweet_with_both
+    elif usgs_link:
+        # Fall back to just USGS if earthquake.city doesn't fit
+        base_tweet = "\n".join(lines)
+        tweet_with_usgs = f"{base_tweet}\n{usgs_link}"
+        if len(tweet_with_usgs) <= 280:
+            tweet = tweet_with_usgs
 
     # Truncate if still too long (shouldn't happen with good formatting)
     if len(tweet) > 280:
@@ -420,9 +441,10 @@ def format_whatsapp_message(
         for poi, distance in nearby_pois[:3]:  # Limit to 3
             lines.append(f"• {poi.name}: {distance:.1f} km away")
 
-    # USGS link
+    # Links
+    lines.append("")
+    lines.append("🔗 https://earthquake.city/sanramon")
     if earthquake.url:
-        lines.append("")
         lines.append(f"🔗 {earthquake.url}")
 
     return "\n".join(lines)
