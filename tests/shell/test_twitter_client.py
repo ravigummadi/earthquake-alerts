@@ -357,7 +357,9 @@ class TestTwitterClientUploadMedia:
 
         request = responses.calls[0].request
         # "TEST" base64 encoded is "VEVTVA=="
-        assert "VEVTVA==" in request.body
+        # request.body is bytes, so decode it for string comparison
+        body_str = request.body.decode() if isinstance(request.body, bytes) else request.body
+        assert "VEVTVA==" in body_str
 
     @responses.activate
     def test_auth_failure_returns_error(self):
