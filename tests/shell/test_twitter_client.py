@@ -11,7 +11,9 @@ from src.shell.twitter_client import (
     TwitterClient,
     TwitterResponse,
     TwitterCredentials,
+    MediaUploadResponse,
     TWITTER_API_URL,
+    TWITTER_MEDIA_UPLOAD_URL,
 )
 
 
@@ -315,3 +317,181 @@ class TestTwitterCredentials:
         assert creds.api_secret == "secret"
         assert creds.access_token == "token"
         assert creds.access_token_secret == "token_secret"
+
+
+class TestTwitterClientUploadMedia:
+    """Tests for TwitterClient.upload_media()."""
+
+    @responses.activate
+    def test_successful_upload_returns_media_id(self):
+        """Successful upload returns MediaUploadResponse with media_id."""
+        responses.add(
+            responses.POST,
+            TWITTER_MEDIA_UPLOAD_URL,
+            json={"media_id": 1234567890, "media_id_string": "1234567890"},
+            status=200,
+        )
+
+        client = TwitterClient()
+        result = client.upload_media(b"PNG_IMAGE_DATA", TEST_CREDS)
+
+        assert result.success is True
+        assert result.status_code == 200
+        assert result.media_id == "1234567890"
+        assert result.error is None
+
+    @responses.activate
+    def test_uploads_base64_encoded_data(self):
+        """Image data is base64 encoded in request."""
+        responses.add(
+            responses.POST,
+            TWITTER_MEDIA_UPLOAD_URL,
+            json={"media_id": 123, "media_id_string": "123"},
+            status=200,
+        )
+
+        client = TwitterClient()
+        client.upload_media(b"TEST", TEST_CREDS)
+
+        request = responses.calls[0].request
+        # "TEST" base64 encoded is "VEVTVA=="
+        assert "VEVTVA==" in request.body
+
+    @responses.activate
+    def test_auth_failure_returns_error(self):
+        """401 auth failure returns descriptive error."""
+        responses.add(
+            responses.POST,
+            TWITTER_MEDIA_UPLOAD_URL,
+            json={"errors": [{"message": "Unauthorized"}]},
+            status=401,
+        )
+
+        client = TwitterClient()
+        result = client.upload_media(b"PNG_DATA", TEST_CREDS)
+
+        assert result.success is False
+        assert result.status_code == 401
+        assert "Authentication failed" in result.error
+
+    @responses.activate
+    def test_file_too_large_returns_error(self):
+        """413 file too large returns descriptive error."""
+        responses.add(
+            responses.POST,
+            TWITTER_MEDIA_UPLOAD_URL,
+            json={"errors": [{"message": "File too large"}]},
+            status=413,
+        )
+
+        client = TwitterClient()
+        result = client.upload_media(b"LARGE_DATA", TEST_CREDS)
+
+        assert result.success is False
+        assert result.status_code == 413
+        assert "too large" in result.error.lower()
+
+    @responses.activate
+    def test_timeout_returns_failure(self):
+        """Request timeout returns failure."""
+        responses.add(
+            responses.POST,
+            TWITTER_MEDIA_UPLOAD_URL,
+            body=requests.Timeout("Connection timed out"),
+        )
+
+        client = TwitterClient(timeout=1)
+        result = client.upload_media(b"PNG_DATA", TEST_CREDS)
+
+        assert result.success is False
+        assert result.status_code == 0
+        assert "timed out" in result.error.lower()
+
+
+class TestTwitterClientSendTweetWithMedia:
+    """Tests for TwitterClient.send_tweet() with media attachments."""
+
+    @responses.activate
+    def test_tweet_with_media_ids(self):
+        """Tweet with media IDs includes media in payload."""
+        responses.add(
+            responses.POST,
+            TWITTER_API_URL,
+            json={"data": {"id": "123"}},
+            status=201,
+        )
+
+        client = TwitterClient()
+        client.send_tweet("Test with image", TEST_CREDS, media_ids=["999"])
+
+        request = responses.calls[0].request
+        import json
+        body = json.loads(request.body)
+        assert "media" in body
+        assert body["media"]["media_ids"] == ["999"]
+
+    @responses.activate
+    def test_tweet_without_media(self):
+        """Tweet without media IDs doesn't include media field."""
+        responses.add(
+            responses.POST,
+            TWITTER_API_URL,
+            json={"data": {"id": "123"}},
+            status=201,
+        )
+
+        client = TwitterClient()
+        client.send_tweet("Test without image", TEST_CREDS)
+
+        request = responses.calls[0].request
+        import json
+        body = json.loads(request.body)
+        assert "media" not in body
+
+    @responses.activate
+    def test_tweet_with_multiple_media_ids(self):
+        """Tweet can have multiple media IDs."""
+        responses.add(
+            responses.POST,
+            TWITTER_API_URL,
+            json={"data": {"id": "123"}},
+            status=201,
+        )
+
+        client = TwitterClient()
+        client.send_tweet("Multiple images", TEST_CREDS, media_ids=["111", "222"])
+
+        request = responses.calls[0].request
+        import json
+        body = json.loads(request.body)
+        assert body["media"]["media_ids"] == ["111", "222"]
+
+
+class TestMediaUploadResponse:
+    """Tests for MediaUploadResponse dataclass."""
+
+    def test_success_response(self):
+        """Successful response has media_id."""
+        response = MediaUploadResponse(
+            success=True,
+            status_code=200,
+            media_id="1234567890",
+        )
+
+        assert response.success is True
+        assert response.status_code == 200
+        assert response.media_id == "1234567890"
+        assert response.error is None
+
+    def test_failure_response(self):
+        """Failure response includes error message."""
+        response = MediaUploadResponse(
+            success=False,
+            status_code=413,
+            error="File too large",
+        )
+
+        assert response.success is False
+        assert response.status_code == 413
+        assert response.media_id is None
+        assert response.error == "File too large"

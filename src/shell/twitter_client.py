@@ -4,6 +4,7 @@ This module handles HTTP communication with the Twitter/X API v2.
 All I/O is contained here; message formatting is in the core module.
 """
 
+import base64
 import logging
 from dataclasses import dataclass
 
@@ -20,6 +21,9 @@ DEFAULT_TIMEOUT = 10
 # Twitter API v2 endpoint for posting tweets
 TWITTER_API_URL = "https://api.twitter.com/2/tweets"
 
+# Twitter API v1.1 endpoint for media upload
+TWITTER_MEDIA_UPLOAD_URL = "https://upload.twitter.com/1.1/media/upload.json"
+
 
 @dataclass
 class TwitterResponse:
@@ -34,6 +38,22 @@ class TwitterResponse:
     success: bool
     status_code: int
     tweet_id: str | None = None
+    error: str | None = None
+
+
+@dataclass
+class MediaUploadResponse:
+    """Response from Twitter media upload API.
+
+    Attributes:
+        success: Whether the upload was successful
+        status_code: HTTP status code
+        media_id: Media ID string if successful (use this in tweets)
+        error: Error message if failed
+    """
+    success: bool
+    status_code: int
+    media_id: str | None = None
     error: str | None = None
 
 
@@ -88,6 +108,7 @@ class TwitterClient:
         self,
         text: str,
         credentials: TwitterCredentials,
+        media_ids: list[str] | None = None,
     ) -> TwitterResponse:
         """Post a tweet to Twitter/X.
 
@@ -96,6 +117,7 @@ class TwitterClient:
         Args:
             text: Tweet text (max 280 characters)
             credentials: Twitter API credentials
+            media_ids: Optional list of media IDs to attach
 
         Returns:
             TwitterResponse indicating success or failure
@@ -109,9 +131,14 @@ class TwitterClient:
         try:
             auth = self._get_oauth(credentials)
 
+            # Build request payload
+            payload: dict = {"text": text}
+            if media_ids:
+                payload["media"] = {"media_ids": media_ids}
+
             response = requests.post(
                 TWITTER_API_URL,
-                json={"text": text},
+                json=payload,
                 auth=auth,
                 timeout=self.timeout,
             )
@@ -171,6 +198,91 @@ class TwitterClient:
         except requests.RequestException as e:
             logger.error("Twitter API request failed: %s", str(e))
             return TwitterResponse(
+                success=False,
+                status_code=0,
+                error=str(e),
+            )
+
+    def upload_media(
+        self,
+        image_bytes: bytes,
+        credentials: TwitterCredentials,
+        media_type: str = "image/png",
+    ) -> MediaUploadResponse:
+        """Upload media to Twitter for use in tweets.
+
+        Uses Twitter API v1.1 media upload endpoint.
+        This method performs HTTP I/O.
+
+        Args:
+            image_bytes: Raw image data (PNG, JPEG, GIF, or WEBP)
+            credentials: Twitter API credentials
+            media_type: MIME type of the image (default: image/png)
+
+        Returns:
+            MediaUploadResponse with media_id or error
+        """
+        logger.info("Uploading media to Twitter (%d bytes)", len(image_bytes))
+
+        try:
+            auth = self._get_oauth(credentials)
+
+            # Encode image as base64 for the upload
+            media_data = base64.b64encode(image_bytes).decode("utf-8")
+
+            response = requests.post(
+                TWITTER_MEDIA_UPLOAD_URL,
+                data={"media_data": media_data},
+                auth=auth,
+                timeout=self.timeout * 3,  # Longer timeout for uploads
+            )
+
+            if response.status_code in (200, 201):
+                data = response.json()
+                media_id = data.get("media_id_string")
+                logger.info("Media uploaded successfully: %s", media_id)
+                return MediaUploadResponse(
+                    success=True,
+                    status_code=response.status_code,
+                    media_id=media_id,
+                )
+            elif response.status_code == 401:
+                logger.error("Twitter media upload authentication failed")
+                return MediaUploadResponse(
+                    success=False,
+                    status_code=response.status_code,
+                    error="Authentication failed - check API credentials",
+                )
+            elif response.status_code == 413:
+                logger.error("Media file too large for Twitter")
+                return MediaUploadResponse(
+                    success=False,
+                    status_code=response.status_code,
+                    error="Media file too large (max 5MB for images)",
+                )
+            else:
+                error_text = response.text
+                logger.warning(
+                    "Twitter media upload returned non-200: %d - %s",
+                    response.status_code,
+                    error_text,
+                )
+                return MediaUploadResponse(
+                    success=False,
+                    status_code=response.status_code,
+                    error=error_text,
+                )
+
+        except requests.Timeout:
+            logger.error("Twitter media upload timed out")
+            return MediaUploadResponse(
+                success=False,
+                status_code=0,
+                error="Request timed out",
+            )
+        except requests.RequestException as e:
+            logger.error("Twitter media upload failed: %s", str(e))
+            return MediaUploadResponse(
                 success=False,
                 status_code=0,
                 error=str(e),

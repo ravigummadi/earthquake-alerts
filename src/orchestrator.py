@@ -18,6 +18,7 @@ from src.core.formatter import (
 )
 from src.core.rules import AlertChannel, make_alert_decisions, AlertDecision
 from src.core.geo import BoundingBox, combine_bounds
+from src.core.static_map import create_map_config
 
 from src.core.config import Config
 from src.shell.usgs_client import USGSClient
@@ -25,6 +26,7 @@ from src.shell.slack_client import SlackClient
 from src.shell.twitter_client import TwitterClient, TwitterCredentials
 from src.shell.whatsapp_client import WhatsAppClient, WhatsAppCredentials
 from src.shell.firestore_client import FirestoreClient, FirestoreConfig
+from src.shell.static_map_client import StaticMapClient
 
 
 logger = logging.getLogger(__name__)
@@ -99,6 +101,7 @@ class Orchestrator:
         twitter_client: TwitterClient | None = None,
         whatsapp_client: WhatsAppClient | None = None,
         firestore_client: FirestoreClient | None = None,
+        static_map_client: StaticMapClient | None = None,
     ) -> None:
         """Initialize orchestrator with configuration.
 
@@ -109,12 +112,14 @@ class Orchestrator:
             twitter_client: Twitter client (created if not provided)
             whatsapp_client: WhatsApp client (created if not provided)
             firestore_client: Firestore client (created if not provided)
+            static_map_client: Static map client (created if not provided)
         """
         self.config = config
         self.usgs_client = usgs_client or USGSClient()
         self.slack_client = slack_client or SlackClient()
         self.twitter_client = twitter_client or TwitterClient()
         self.whatsapp_client = whatsapp_client or WhatsAppClient()
+        self.static_map_client = static_map_client or StaticMapClient()
         self.firestore_client = firestore_client or FirestoreClient(
             FirestoreConfig(
                 database=config.firestore_database,
@@ -212,7 +217,7 @@ class Orchestrator:
         channel: AlertChannel,
         nearby_pois: list[tuple],
     ) -> AlertResult:
-        """Send an alert via Twitter/X."""
+        """Send an alert via Twitter/X with map snapshot."""
         # Check for credentials
         if not channel.credentials:
             return AlertResult(
@@ -245,10 +250,40 @@ class Orchestrator:
             nearby_pois=nearby_pois,
         )
 
-        # Send via shell
+        # Generate map snapshot (pure config + shell I/O)
+        media_ids = None
+        map_config = create_map_config(
+            latitude=earthquake.latitude,
+            longitude=earthquake.longitude,
+            magnitude=earthquake.magnitude,
+        )
+        map_result = self.static_map_client.generate_map(map_config)
+
+        if map_result.success and map_result.image_bytes:
+            # Upload image to Twitter
+            upload_result = self.twitter_client.upload_media(
+                map_result.image_bytes,
+                twitter_creds,
+            )
+            if upload_result.success and upload_result.media_id:
+                media_ids = [upload_result.media_id]
+                logger.info("Map image uploaded for tweet: %s", upload_result.media_id)
+            else:
+                logger.warning(
+                    "Failed to upload map image: %s (continuing without image)",
+                    upload_result.error,
+                )
+        else:
+            logger.warning(
+                "Failed to generate map image: %s (continuing without image)",
+                map_result.error,
+            )
+
+        # Send tweet via shell (with or without media)
         response = self.twitter_client.send_tweet(
             tweet_text,
             twitter_creds,
+            media_ids=media_ids,
         )
 
         return AlertResult(
