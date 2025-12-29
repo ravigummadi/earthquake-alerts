@@ -90,7 +90,7 @@ alert_channels:
       access_token: "${secret:twitter-access-token}"
       access_token_secret: "${secret:twitter-access-token-secret}"
     rules:
-      min_magnitude: 3.0
+      min_magnitude: 2.5
       bounds:
         min_latitude: 35.9024
         max_latitude: 39.18543
