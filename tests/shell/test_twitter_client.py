@@ -3,6 +3,8 @@
 Uses the `responses` library to mock HTTP requests.
 """
 
+import json
+
 import pytest
 import responses
 import requests
@@ -425,8 +427,11 @@ class TestTwitterClientSendTweetWithMedia:
         client.send_tweet("Test with image", TEST_CREDS, media_ids=["999"])
 
         request = responses.calls[0].request
-        import json
-        body = json.loads(request.body)
+        # Handle both bytes and string body
+        body_data = request.body
+        if isinstance(body_data, bytes):
+            body_data = body_data.decode("utf-8")
+        body = json.loads(body_data)
         assert "media" in body
         assert body["media"]["media_ids"] == ["999"]
 
@@ -444,8 +449,11 @@ class TestTwitterClientSendTweetWithMedia:
         client.send_tweet("Test without image", TEST_CREDS)
 
         request = responses.calls[0].request
-        import json
-        body = json.loads(request.body)
+        # Handle both bytes and string body
+        body_data = request.body
+        if isinstance(body_data, bytes):
+            body_data = body_data.decode("utf-8")
+        body = json.loads(body_data)
         assert "media" not in body
 
     @responses.activate
@@ -462,8 +470,11 @@ class TestTwitterClientSendTweetWithMedia:
         client.send_tweet("Multiple images", TEST_CREDS, media_ids=["111", "222"])
 
         request = responses.calls[0].request
-        import json
-        body = json.loads(request.body)
+        # Handle both bytes and string body
+        body_data = request.body
+        if isinstance(body_data, bytes):
+            body_data = body_data.decode("utf-8")
+        body = json.loads(body_data)
         assert body["media"]["media_ids"] == ["111", "222"]
 
 
