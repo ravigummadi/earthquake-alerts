@@ -9,6 +9,12 @@ export const metadata: Metadata = {
   description: "Track earthquakes in your area with real-time updates and a beautiful 3D globe visualization.",
   keywords: ["earthquake", "seismic", "tracker", "real-time", "USGS"],
   authors: [{ name: "earthquake.city" }],
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Quakes",
+  },
   icons: {
     icon: [
       { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
