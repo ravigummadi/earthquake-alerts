@@ -20,6 +20,7 @@ env:
   REGION: us-central1
   FUNCTION_NAME: earthquake-monitor
   WEB_SERVICE_NAME: earthquake-city
+  API_SERVICE_NAME: earthquake-api
 
 jobs:
   # Detect which parts of the codebase changed
@@ -27,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
+      api: ${{ steps.filter.outputs.api }}
       web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +42,8 @@ jobs:
               - 'requirements.txt'
               - 'env-vars.yaml'
               - 'config/**'
+            api:
+              - 'api/**'
             web:
               - 'web/**'
 
@@ -103,48 +107,6 @@ jobs:
             --timeout 60s \
             --env-vars-file env-vars.yaml
 
-      - name: Deploy Cloud Function (api-latest-earthquake)
-        run: |
-          gcloud functions deploy api-latest-earthquake \
-            --gen2 \
-            --runtime python311 \
-            --region ${{ env.REGION }} \
-            --source . \
-            --entry-point api_latest_earthquake \
-            --trigger-http \
-            --allow-unauthenticated \
-            --memory 256MB \
-            --timeout 30s \
-            --env-vars-file env-vars.yaml
-
-      - name: Deploy Cloud Function (api-recent-earthquakes)
-        run: |
-          gcloud functions deploy api-recent-earthquakes \
-            --gen2 \
-            --runtime python311 \
-            --region ${{ env.REGION }} \
-            --source . \
-            --entry-point api_recent_earthquakes \
-            --trigger-http \
-            --allow-unauthenticated \
-            --memory 256MB \
-            --timeout 30s \
-            --env-vars-file env-vars.yaml
-
-      - name: Deploy Cloud Function (api-locales)
-        run: |
-          gcloud functions deploy api-locales \
-            --gen2 \
-            --runtime python311 \
-            --region ${{ env.REGION }} \
-            --source . \
-            --entry-point api_locales \
-            --trigger-http \
-            --allow-unauthenticated \
-            --memory 256MB \
-            --timeout 30s \
-            --env-vars-file env-vars.yaml
-
       - name: Verify deployment
         run: |
           FUNCTION_URL=$(gcloud functions describe ${{ env.FUNCTION_NAME }} \
@@ -159,6 +121,57 @@ jobs:
             echo "Deployment verified successfully!"
           else
             echo "Deployment verification failed!"
+            exit 1
+          fi
+
+  # Deploy API (Cloud Run)
+  deploy-api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy API to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.API_SERVICE_NAME }} \
+            --source api/ \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 256Mi \
+            --min-instances 0 \
+            --max-instances 10
+
+      - name: Verify API deployment
+        run: |
+          API_URL=$(gcloud run services describe ${{ env.API_SERVICE_NAME }} \
+            --region ${{ env.REGION }} \
+            --format='value(status.url)')
+          echo "API URL: $API_URL"
+
+          # Test health endpoint
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/health")
+          echo "Health check status: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "API deployment verified successfully!"
+          else
+            echo "API deployment verification failed!"
             exit 1
           fi
 
@@ -183,6 +196,18 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Get API URL
+        id: api-url
+        run: |
+          API_URL=$(gcloud run services describe ${{ env.API_SERVICE_NAME }} \
+            --region ${{ env.REGION }} \
+            --format='value(status.url)' 2>/dev/null || echo "")
+          if [ -z "$API_URL" ]; then
+            # Fallback to expected URL format if service doesn't exist yet
+            API_URL="https://earthquake-api-793997436187.us-central1.run.app"
+          fi
+          echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+
       - name: Deploy to Cloud Run
         run: |
           cd web
@@ -193,7 +218,7 @@ jobs:
             --allow-unauthenticated \
             --port 8080 \
             --memory 512Mi \
-            --set-env-vars "NEXT_PUBLIC_API_URL=https://${{ env.REGION }}-${{ env.PROJECT_ID }}.cloudfunctions.net"
+            --set-env-vars "NEXT_PUBLIC_API_URL=${{ steps.api-url.outputs.api_url }}"
 
       - name: Verify web deployment
         run: |
