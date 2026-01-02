@@ -472,13 +472,23 @@ class Orchestrator:
         for decision in decisions:
             results = self._process_decision(decision)
 
+            # Track success/failure for this earthquake
+            decision_successes = []
+            decision_failures = []
+
             for result in results:
                 if result.success:
                     alerts_sent.append(result)
-                    if result.earthquake not in successfully_alerted:
-                        successfully_alerted.append(result.earthquake)
+                    decision_successes.append(result)
                 else:
                     alerts_failed.append(result)
+                    decision_failures.append(result)
+
+            # Only mark earthquake as alerted if ALL channels succeeded
+            # This ensures failed channels get retried on next poll
+            if decision_successes and not decision_failures:
+                if decision.earthquake not in successfully_alerted:
+                    successfully_alerted.append(decision.earthquake)
 
         # Step 5: Update deduplication state
         if successfully_alerted:
