@@ -9,6 +9,7 @@ from src.main import (
     earthquake_monitor_pubsub,
     api_latest_earthquake,
     api_locales,
+    api_recent_earthquakes,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "earthquake_monitor_pubsub",
     "api_latest_earthquake",
     "api_locales",
+    "api_recent_earthquakes",
 ]
