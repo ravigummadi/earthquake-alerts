@@ -19,15 +19,16 @@ from src.shell.usgs_client import USGSClient, USGSQueryParams
 logger = logging.getLogger(__name__)
 
 # Locale configurations - maps URL slugs to regions
+# Bounds must match api/main.py and config/config-production.yaml
 LOCALES: dict[str, dict[str, Any]] = {
     "sanramon": {
         "name": "San Ramon",
         "display_name": "San Ramon, CA",
         "bounds": BoundingBox(
-            min_latitude=35.9024,
-            max_latitude=39.18543,
-            min_longitude=-122.92603,
-            max_longitude=-120.71777,
+            min_latitude=37.3,
+            max_latitude=38.3,
+            min_longitude=-122.5,
+            max_longitude=-121.5,
         ),
         "center": {"lat": 37.78, "lng": -121.98},
         "min_magnitude": 2.5,
@@ -36,10 +37,10 @@ LOCALES: dict[str, dict[str, Any]] = {
         "name": "Bay Area",
         "display_name": "San Francisco Bay Area",
         "bounds": BoundingBox(
-            min_latitude=35.9024,
-            max_latitude=39.18543,
-            min_longitude=-123.5,
-            max_longitude=-120.5,
+            min_latitude=37.0,
+            max_latitude=38.5,
+            min_longitude=-123.0,
+            max_longitude=-121.5,
         ),
         "center": {"lat": 37.77, "lng": -122.42},
         "min_magnitude": 2.5,
