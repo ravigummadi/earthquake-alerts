@@ -66,9 +66,9 @@ export interface LocalesResponse {
   locales: LocaleConfig[];
 }
 
-// Fallback locale - single source of truth from shared JSON
-// Used when API is unavailable during build
-import fallbackLocaleData from "../../shared/fallback-locale.json";
+// Fallback locale - used when API is unavailable during build
+// Source of truth: shared/fallback-locale.json (copied here for Docker build)
+import fallbackLocaleData from "./fallback-locale.json";
 
 const FALLBACK_LOCALES: LocaleConfig[] = [fallbackLocaleData];
 
