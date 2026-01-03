@@ -176,52 +176,55 @@ def _invalidate_cache() -> None:
     _cache_timestamp = 0
 
 
-# ===== Fallback Locales (used when Firestore is unavailable) =====
+# ===== Fallback Locale (used when Firestore is unavailable) =====
 
-FALLBACK_LOCALES: dict[str, dict[str, Any]] = {
-    "sanramon": {
-        "name": "San Ramon",
-        "display_name": "San Ramon, CA",
-        "bounds": BoundingBox(
-            min_latitude=37.3,
-            max_latitude=38.3,
-            min_longitude=-122.5,
-            max_longitude=-121.5,
-        ),
-        "center": {"lat": 37.78, "lng": -121.98},
-        "min_magnitude": 2.5,
-        "is_featured": True,
-        "sort_order": 1,
-    },
-    "bayarea": {
-        "name": "Bay Area",
-        "display_name": "San Francisco Bay Area",
-        "bounds": BoundingBox(
-            min_latitude=37.0,
-            max_latitude=38.5,
-            min_longitude=-123.0,
-            max_longitude=-121.5,
-        ),
-        "center": {"lat": 37.77, "lng": -122.42},
-        "min_magnitude": 2.5,
-        "is_featured": True,
-        "sort_order": 2,
-    },
-    "la": {
-        "name": "Los Angeles",
-        "display_name": "Los Angeles, CA",
-        "bounds": BoundingBox(
-            min_latitude=33.5,
-            max_latitude=34.8,
-            min_longitude=-119.0,
-            max_longitude=-117.0,
-        ),
-        "center": {"lat": 34.05, "lng": -118.24},
-        "min_magnitude": 2.5,
-        "is_featured": True,
-        "sort_order": 3,
-    },
-}
+def _load_fallback_locale() -> dict[str, dict[str, Any]]:
+    """Load fallback locale from shared JSON file."""
+    import json
+    from pathlib import Path
+
+    # Try relative path from api/ directory, then absolute
+    paths = [
+        Path(__file__).parent.parent / "shared" / "fallback-locale.json",
+        Path("/app/shared/fallback-locale.json"),  # Cloud Run container path
+    ]
+
+    for path in paths:
+        if path.exists():
+            with open(path) as f:
+                data = json.load(f)
+                return {
+                    data["slug"]: {
+                        "name": data["name"],
+                        "display_name": data["display_name"],
+                        "bounds": BoundingBox(
+                            min_latitude=data["bounds"]["min_latitude"],
+                            max_latitude=data["bounds"]["max_latitude"],
+                            min_longitude=data["bounds"]["min_longitude"],
+                            max_longitude=data["bounds"]["max_longitude"],
+                        ),
+                        "center": data["center"],
+                        "min_magnitude": data["min_magnitude"],
+                        "is_featured": True,
+                        "sort_order": 1,
+                    }
+                }
+
+    # Hardcoded ultimate fallback if file not found
+    logger.warning("Fallback locale file not found, using hardcoded default")
+    return {
+        "sanramon": {
+            "name": "San Ramon",
+            "display_name": "San Ramon, CA",
+            "bounds": BoundingBox(37.3, 38.3, -122.5, -121.5),
+            "center": {"lat": 37.78, "lng": -121.98},
+            "min_magnitude": 2.5,
+            "is_featured": True,
+            "sort_order": 1,
+        }
+    }
+
+FALLBACK_LOCALES = _load_fallback_locale()
 
 USGS_API_URL = "https://earthquake.usgs.gov/fdsnws/event/1/query"
 

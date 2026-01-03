@@ -66,34 +66,11 @@ export interface LocalesResponse {
   locales: LocaleConfig[];
 }
 
-// Fallback locale data for build time when API is unavailable
-// Bounds must match api/main.py and config/config-production.yaml
-const FALLBACK_LOCALES: LocaleConfig[] = [
-  {
-    slug: "sanramon",
-    name: "San Ramon",
-    display_name: "San Ramon, CA",
-    bounds: { min_latitude: 37.3, max_latitude: 38.3, min_longitude: -122.5, max_longitude: -121.5 },
-    center: { lat: 37.78, lng: -121.98 },
-    min_magnitude: 2.5,
-  },
-  {
-    slug: "bayarea",
-    name: "Bay Area",
-    display_name: "San Francisco Bay Area",
-    bounds: { min_latitude: 37.0, max_latitude: 38.5, min_longitude: -123.0, max_longitude: -121.5 },
-    center: { lat: 37.77, lng: -122.42 },
-    min_magnitude: 2.5,
-  },
-  {
-    slug: "la",
-    name: "Los Angeles",
-    display_name: "Los Angeles, CA",
-    bounds: { min_latitude: 33.5, max_latitude: 34.8, min_longitude: -119.0, max_longitude: -117.0 },
-    center: { lat: 34.05, lng: -118.24 },
-    min_magnitude: 2.5,
-  },
-];
+// Fallback locale - single source of truth from shared JSON
+// Used when API is unavailable during build
+import fallbackLocaleData from "../../shared/fallback-locale.json";
+
+const FALLBACK_LOCALES: LocaleConfig[] = [fallbackLocaleData];
 
 /**
  * Fetch all available locales from the API.
