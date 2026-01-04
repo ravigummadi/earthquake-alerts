@@ -103,8 +103,8 @@ jobs:
             --entry-point earthquake_monitor \
             --trigger-http \
             --allow-unauthenticated \
-            --memory 256MB \
-            --timeout 60s \
+            --memory 512MB \
+            --timeout 120s \
             --env-vars-file env-vars.yaml
 
       - name: Verify deployment
