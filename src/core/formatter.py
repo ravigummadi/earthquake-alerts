@@ -185,7 +185,7 @@ def format_slack_message(
                 "type": "plain_text",
                 "text": "earthquake.city",
             },
-            "url": "https://earthquake.city/sanramon",
+            "url": "https://earthquake.city/sanramon?from=alert",
         })
 
         blocks.append({
@@ -345,7 +345,7 @@ def format_twitter_message(
 
     # Line 4: Links (if space allows)
     usgs_link = earthquake.url or ""
-    city_link = "https://earthquake.city/sanramon"
+    city_link = "https://earthquake.city/sanramon?from=alert"
 
     # Build tweet and check length
     tweet = "\n".join(lines)
@@ -443,7 +443,7 @@ def format_whatsapp_message(
 
     # Links
     lines.append("")
-    lines.append("🔗 https://earthquake.city/sanramon")
+    lines.append("🔗 https://earthquake.city/sanramon?from=alert")
     if earthquake.url:
         lines.append(f"🔗 {earthquake.url}")
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Header from "@/components/Header";
 import CountdownTimer from "@/components/CountdownTimer";
 import EarthquakeCard from "@/components/EarthquakeCard";
@@ -40,6 +41,13 @@ export default function LocalePage({
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Detect if user arrived from an alert link (e.g., Slack, Twitter, WhatsApp)
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const fromAlert = searchParams.get("from") === "alert";
+  const hasCleanedUrlRef = useRef(false);
+
   // Recent earthquakes state
   const [recentEarthquakes, setRecentEarthquakes] = useState<Earthquake[]>([]);
   const [showRecentTable, setShowRecentTable] = useState(false);
@@ -51,7 +59,7 @@ export default function LocalePage({
   const center = region?.center ?? initialCenter;
 
   useEffect(() => {
-    async function fetchData() {
+    async function fetchData(bustCache: boolean = false) {
       // Cancel any in-flight request
       abortControllerRef.current?.abort();
       abortControllerRef.current = new AbortController();
@@ -60,10 +68,18 @@ export default function LocalePage({
         setLoading(true);
         setError(null);
 
-        const response = await fetch(
-          `${API_BASE_URL}/api-latest-earthquake?locale=${localeSlug}`,
-          { signal: abortControllerRef.current.signal }
-        );
+        // Add cache-busting timestamp when coming from an alert link
+        // This ensures the user sees the freshest data matching their alert
+        let url = `${API_BASE_URL}/api-latest-earthquake?locale=${localeSlug}`;
+        if (bustCache) {
+          url += `&_t=${Date.now()}`;
+        }
+
+        const response = await fetch(url, {
+          signal: abortControllerRef.current.signal,
+          // Force no-cache when coming from alert to bypass any CDN/browser caching
+          ...(bustCache && { cache: "no-store" }),
+        });
 
         if (!response.ok) {
           throw new Error("Failed to fetch earthquake data");
@@ -85,14 +101,25 @@ export default function LocalePage({
       }
     }
 
-    fetchData();
+    // If user arrived from alert, force fresh data and clean up URL
+    const shouldBustCache = fromAlert && !hasCleanedUrlRef.current;
+    fetchData(shouldBustCache);
 
-    const interval = setInterval(fetchData, REFRESH_INTERVAL_MS);
+    // Clean up the URL by removing the 'from' query parameter
+    // This prevents the cache-busting from happening on every subsequent poll
+    // and allows clean bookmarking
+    if (fromAlert && !hasCleanedUrlRef.current) {
+      hasCleanedUrlRef.current = true;
+      // Use replaceState to avoid adding to browser history
+      router.replace(pathname, { scroll: false });
+    }
+
+    const interval = setInterval(() => fetchData(false), REFRESH_INTERVAL_MS);
     return () => {
       clearInterval(interval);
       abortControllerRef.current?.abort();
     };
-  }, [localeSlug]);
+  }, [localeSlug, fromAlert, pathname, router]);
 
   // Reset recent earthquakes when locale changes
   useEffect(() => {
