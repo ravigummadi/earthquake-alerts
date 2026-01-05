@@ -9,7 +9,12 @@ import logging
 from dataclasses import dataclass
 
 from src.core.earthquake import Earthquake, parse_earthquakes
-from src.core.dedup import filter_already_alerted, compute_ids_to_store
+from src.core.dedup import (
+    filter_already_alerted,
+    compute_ids_to_store,
+    compute_ids_to_expire,
+    get_earthquake_ids,
+)
 from src.core.formatter import (
     format_slack_message,
     format_twitter_message,
@@ -495,6 +500,17 @@ class Orchestrator:
             new_ids = compute_ids_to_store(successfully_alerted)
             if not self.firestore_client.add_alerted_ids(new_ids):
                 errors.append("Failed to update deduplication state")
+
+        # Step 6: Cleanup expired IDs to keep Firestore bounded
+        current_earthquake_ids = get_earthquake_ids(earthquakes)
+        # Calculate total stored IDs (existing + newly added)
+        total_stored_ids = alerted_ids | compute_ids_to_store(successfully_alerted)
+        ids_to_expire = compute_ids_to_expire(total_stored_ids, current_earthquake_ids)
+
+        if ids_to_expire:
+            logger.info("Expiring %d old earthquake IDs", len(ids_to_expire))
+            if not self.firestore_client.remove_alerted_ids(ids_to_expire):
+                errors.append("Failed to expire old earthquake IDs")
 
         return ProcessingResult(
             earthquakes_fetched=len(earthquakes),
