@@ -19,6 +19,13 @@ from src.core.formatter import (
 from src.core.rules import AlertChannel, make_alert_decisions, AlertDecision
 from src.core.geo import BoundingBox, combine_bounds
 from src.core.static_map import create_map_config
+from src.core.rate_limit import (
+    RateLimitState,
+    check_rate_limit,
+    record_alert,
+    get_violations,
+    format_violation_message,
+)
 
 from src.core.config import Config
 from src.shell.usgs_client import USGSClient
@@ -57,13 +64,17 @@ class ProcessingResult:
         earthquakes_new: Earthquakes not previously alerted
         alerts_sent: Successfully sent alerts
         alerts_failed: Failed alert attempts
+        alerts_rate_limited: Alerts blocked by rate limiting
         errors: Any errors that occurred
+        rate_limit_warnings: Rate limit violation messages
     """
     earthquakes_fetched: int
     earthquakes_new: int
     alerts_sent: list[AlertResult]
     alerts_failed: list[AlertResult]
+    alerts_rate_limited: list[AlertResult]
     errors: list[str]
+    rate_limit_warnings: list[str]
 
     @property
     def success(self) -> bool:
@@ -73,12 +84,15 @@ class ProcessingResult:
     @property
     def summary(self) -> str:
         """Human-readable summary of the processing result."""
-        return (
-            f"Fetched {self.earthquakes_fetched} earthquakes, "
-            f"{self.earthquakes_new} new, "
-            f"{len(self.alerts_sent)} alerts sent, "
-            f"{len(self.alerts_failed)} failed"
-        )
+        parts = [
+            f"Fetched {self.earthquakes_fetched} earthquakes",
+            f"{self.earthquakes_new} new",
+            f"{len(self.alerts_sent)} alerts sent",
+            f"{len(self.alerts_failed)} failed",
+        ]
+        if self.alerts_rate_limited:
+            parts.append(f"{len(self.alerts_rate_limited)} rate-limited")
+        return ", ".join(parts)
 
 
 class Orchestrator:
@@ -361,22 +375,56 @@ class Orchestrator:
             error="; ".join(errors) if errors else None,
         )
 
-    def _process_decision(self, decision: AlertDecision) -> list[AlertResult]:
-        """Process a single alert decision.
+    def _process_decision(
+        self,
+        decision: AlertDecision,
+        rate_limit_state: RateLimitState,
+    ) -> tuple[list[AlertResult], list[AlertResult], RateLimitState]:
+        """Process a single alert decision with rate limiting.
 
         Args:
             decision: Alert decision with earthquake and channels
+            rate_limit_state: Current rate limit state
 
         Returns:
-            List of alert results
+            Tuple of (sent results, rate-limited results, updated state)
         """
-        results = []
+        sent_results = []
+        rate_limited_results = []
+        state = rate_limit_state
 
         for channel in decision.channels:
+            # Check rate limit before sending
+            limit_check = check_rate_limit(
+                channel.name,
+                state,
+                self.config.rate_limit,
+            )
+
+            if not limit_check.allowed:
+                # Rate limit exceeded - don't send
+                logger.warning(
+                    "Rate limit exceeded for M%.1f %s to %s: %s",
+                    decision.earthquake.magnitude,
+                    decision.earthquake.place,
+                    channel.name,
+                    limit_check.reason,
+                )
+                rate_limited_results.append(AlertResult(
+                    earthquake=decision.earthquake,
+                    channel=channel,
+                    success=False,
+                    error=limit_check.reason,
+                ))
+                continue
+
+            # Send the alert
             result = self._send_alert(decision.earthquake, channel)
-            results.append(result)
+            sent_results.append(result)
 
             if result.success:
+                # Record successful alert for rate limiting
+                state = record_alert(channel.name, state)
                 logger.info(
                     "Sent alert for M%.1f %s to %s",
                     decision.earthquake.magnitude,
@@ -392,7 +440,7 @@ class Orchestrator:
                     result.error,
                 )
 
-        return results
+        return sent_results, rate_limited_results, state
 
     def process(self) -> ProcessingResult:
         """Run a complete earthquake monitoring cycle.
@@ -401,7 +449,7 @@ class Orchestrator:
         1. Fetches earthquakes from USGS
         2. Filters out already-alerted earthquakes
         3. Evaluates alert rules
-        4. Sends notifications
+        4. Sends notifications (with rate limiting)
         5. Updates deduplication state
 
         Returns:
@@ -410,6 +458,8 @@ class Orchestrator:
         errors: list[str] = []
         alerts_sent: list[AlertResult] = []
         alerts_failed: list[AlertResult] = []
+        alerts_rate_limited: list[AlertResult] = []
+        rate_limit_warnings: list[str] = []
 
         # Step 1: Fetch earthquakes
         try:
@@ -423,7 +473,9 @@ class Orchestrator:
                 earthquakes_new=0,
                 alerts_sent=[],
                 alerts_failed=[],
+                alerts_rate_limited=[],
                 errors=[error_msg],
+                rate_limit_warnings=[],
             )
 
         if not earthquakes:
@@ -433,7 +485,9 @@ class Orchestrator:
                 earthquakes_new=0,
                 alerts_sent=[],
                 alerts_failed=[],
+                alerts_rate_limited=[],
                 errors=[],
+                rate_limit_warnings=[],
             )
 
         # Step 2: Filter already-alerted (deduplication)
@@ -452,7 +506,9 @@ class Orchestrator:
                 earthquakes_new=0,
                 alerts_sent=[],
                 alerts_failed=[],
+                alerts_rate_limited=[],
                 errors=[],
+                rate_limit_warnings=[],
             )
 
         # Step 3: Evaluate alert rules (pure core function)
@@ -466,17 +522,23 @@ class Orchestrator:
             len(decisions),
         )
 
-        # Step 4: Send notifications
+        # Step 4: Send notifications with rate limiting
         successfully_alerted: list[Earthquake] = []
+        rate_limit_state = RateLimitState()
 
         for decision in decisions:
-            results = self._process_decision(decision)
+            sent_results, limited_results, rate_limit_state = self._process_decision(
+                decision, rate_limit_state
+            )
+
+            # Track rate-limited alerts
+            alerts_rate_limited.extend(limited_results)
 
             # Track success/failure for this earthquake
             decision_successes = []
             decision_failures = []
 
-            for result in results:
+            for result in sent_results:
                 if result.success:
                     alerts_sent.append(result)
                     decision_successes.append(result)
@@ -492,6 +554,17 @@ class Orchestrator:
                 if decision.earthquake not in successfully_alerted:
                     successfully_alerted.append(decision.earthquake)
 
+        # Check for rate limit violations and generate warnings
+        violations = get_violations(rate_limit_state, self.config.rate_limit)
+        if violations:
+            violation_msg = format_violation_message(violations)
+            logger.warning(violation_msg)
+            rate_limit_warnings.append(violation_msg)
+
+            # If configured to fail on limit exceeded, add to errors
+            if self.config.rate_limit.fail_on_limit_exceeded:
+                errors.append(f"Rate limit exceeded: {violation_msg}")
+
         # Step 5: Update deduplication state
         if successfully_alerted:
             new_ids = compute_ids_to_store(successfully_alerted)
@@ -503,5 +576,7 @@ class Orchestrator:
             earthquakes_new=len(new_earthquakes),
             alerts_sent=alerts_sent,
             alerts_failed=alerts_failed,
+            alerts_rate_limited=alerts_rate_limited,
             errors=errors,
+            rate_limit_warnings=rate_limit_warnings,
         )

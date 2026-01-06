@@ -17,6 +17,16 @@ firestore_database: earthquake-alerts
 # Firestore collection for storing alerted earthquake IDs
 firestore_collection: earthquake_alerts
 
+# Rate limiting to prevent alert spam
+# If thresholds are exceeded, alerts are blocked and warnings are logged
+rate_limit:
+  # Maximum total alerts per monitoring cycle (0 = unlimited)
+  max_alerts_per_run: 10
+  # Maximum alerts per channel per cycle (0 = unlimited)
+  max_alerts_per_channel: 5
+  # If true, return error when limit exceeded; else just warn
+  fail_on_limit_exceeded: false
+
 # Geographic regions to monitor
 monitoring_regions:
   - name: "Bay Area"

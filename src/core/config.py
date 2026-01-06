@@ -23,6 +23,20 @@ class MonitoringRegion:
 
 
 @dataclass
+class RateLimitConfig:
+    """Rate limiting configuration for alerts.
+
+    Attributes:
+        max_alerts_per_run: Maximum total alerts per monitoring cycle (0 = unlimited)
+        max_alerts_per_channel: Maximum alerts per channel per cycle (0 = unlimited)
+        fail_on_limit_exceeded: If True, raise error when limit exceeded; else warn
+    """
+    max_alerts_per_run: int = 10
+    max_alerts_per_channel: int = 5
+    fail_on_limit_exceeded: bool = False
+
+
+@dataclass
 class Config:
     """Application configuration.
 
@@ -37,6 +51,7 @@ class Config:
         firestore_database: Firestore database name (None for default)
         firestore_collection: Firestore collection for deduplication
         min_fetch_magnitude: Minimum magnitude to fetch from USGS
+        rate_limit: Rate limiting configuration
     """
     polling_interval_seconds: int = 60
     lookback_hours: int = 1
@@ -46,6 +61,7 @@ class Config:
     firestore_database: str | None = None
     firestore_collection: str = "earthquake_alerts"
     min_fetch_magnitude: float | None = None
+    rate_limit: RateLimitConfig = field(default_factory=RateLimitConfig)
 
 
 @dataclass
