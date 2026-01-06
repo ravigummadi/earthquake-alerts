@@ -1,5 +1,10 @@
 name: Send Test Alert
 
+# ⚠️  WARNING: This workflow sends REAL notifications!
+# - Slack: Messages real channels
+# - Twitter: Posts to @quake_alerts (PUBLIC!) - requires explicit opt-in
+# - WhatsApp: Sends to real phone numbers
+
 on:
   workflow_dispatch:
     inputs:
@@ -12,9 +17,17 @@ on:
         required: false
         default: '8km NE of San Ramon, CA'
       channel:
-        description: 'Specific channel to send to (leave empty for all channels)'
+        description: 'Specific channel name (leave empty for Slack only)'
         required: false
         default: ''
+      include_twitter:
+        description: '⚠️ Include Twitter? (POSTS PUBLICLY to @quake_alerts!)'
+        type: boolean
+        default: false
+      slack_only:
+        description: 'Send to Slack channels only (safest option)'
+        type: boolean
+        default: true
 
 env:
   PROJECT_ID: gen-lang-client-0579637657
@@ -52,11 +65,23 @@ jobs:
           GCP_PROJECT: ${{ env.PROJECT_ID }}
           CONFIG_PATH: config/config-production.yaml
         run: |
-          # Build command with optional channel filter
+          # Build command with safety flags
           CMD="python scripts/send_test_alert.py --magnitude ${{ inputs.magnitude }} --location '${{ inputs.location }}'"
 
+          # Add channel filter if specified
           if [ -n "${{ inputs.channel }}" ]; then
             CMD="$CMD --channel '${{ inputs.channel }}'"
+          fi
+
+          # Add slack-only flag if enabled (default: true)
+          if [ "${{ inputs.slack_only }}" = "true" ]; then
+            CMD="$CMD --slack-only"
+          fi
+
+          # Add include-twitter flag if explicitly enabled
+          if [ "${{ inputs.include_twitter }}" = "true" ]; then
+            echo "⚠️  WARNING: Twitter posting is enabled - this will post PUBLICLY!"
+            CMD="$CMD --include-twitter"
           fi
 
           echo "Running: $CMD"

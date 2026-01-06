@@ -5,6 +5,48 @@ A serverless earthquake monitoring application that fetches earthquake data from
 
 **Live Twitter**: [@quake_alerts](https://x.com/quake_alerts) - Automated earthquake alerts for the Bay Area
 
+---
+
+## ⚠️ ULTRA-SENSITIVE CODE - NOTIFICATION SYSTEM
+
+**THE FOLLOWING FILES SEND REAL NOTIFICATIONS TO PRODUCTION CHANNELS. MISTAKES HERE WILL SPAM USERS AND DAMAGE THE SERVICE'S REPUTATION.**
+
+### Critical Files (Require Extra Caution)
+| File | Risk | Description |
+|------|------|-------------|
+| `src/core/formatter.py` | 🔴 HIGH | Formats ALL alert messages (Slack, Twitter, WhatsApp) |
+| `src/shell/slack_client.py` | 🔴 HIGH | Sends to real Slack channels |
+| `src/shell/twitter_client.py` | 🔴 HIGH | Posts to @quake_alerts (public!) |
+| `src/shell/whatsapp_client.py` | 🔴 HIGH | Sends to real phone numbers |
+| `src/orchestrator.py` | 🔴 HIGH | Orchestrates all alert sending |
+| `scripts/send_test_alert.py` | 🟡 MEDIUM | Test alerts - can spam if misconfigured |
+| `.github/workflows/test-alert.yml` | 🟡 MEDIUM | Triggers test alerts |
+
+### Mandatory Requirements Before Modifying Alert Code
+
+1. **RUN ALL TESTS FIRST**: `pytest tests/ -v` - ALL tests must pass
+2. **VERIFY BACKWARDS COMPATIBILITY**: Any new parameters MUST have safe defaults
+3. **CHECK FOR UNINTENDED SENDS**: Trace the full code path to ensure alerts only go where intended
+4. **TEST WITH DRY-RUN FIRST**: Use `--dry-run` flag when available
+5. **NEVER REMOVE SAFEGUARDS**: Deduplication, rate limiting, and channel filtering exist for a reason
+
+### Test Requirements for Alert Code Changes
+
+Any PR modifying alert-related code MUST include:
+- [ ] Unit tests for ALL new/modified formatting functions
+- [ ] Tests verifying default behavior is unchanged (backwards compatibility)
+- [ ] Tests for edge cases (empty data, missing fields, malformed input)
+- [ ] Integration test showing the full alert path (if adding new channels)
+
+### Common Mistakes to Avoid
+- ❌ Adding parameters without defaults (breaks existing callers)
+- ❌ Changing message format without testing all channels
+- ❌ Modifying channel iteration logic without testing dedup
+- ❌ Updating test alert scripts that send to production channels
+- ❌ Forgetting to pass `is_test=True` in test alert code
+
+---
+
 ## Architecture Pattern: Functional Core, Imperative Shell
 
 This project strictly follows the **Functional Core, Imperative Shell** pattern from the [Google Testing Blog](https://testing.googleblog.com/2025/10/simplify-your-code-functional-core.html).

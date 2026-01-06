@@ -341,3 +341,148 @@ class TestGetNearbyPois:
         poi, distance = result[0]
         assert isinstance(distance, float)
         assert distance < 50
+
+
+class TestBackwardsCompatibility:
+    """Tests ensuring backwards compatibility when modifying formatters.
+
+    ⚠️  CRITICAL: These tests prevent breaking changes to the alert system.
+    Any changes to formatter signatures MUST maintain backwards compatibility.
+    """
+
+    def test_format_slack_message_works_without_is_test(self, sample_earthquake):
+        """format_slack_message must work without is_test parameter."""
+        # This is how production code calls it - must not break!
+        result = format_slack_message(sample_earthquake)
+        assert "text" in result
+        assert "blocks" in result
+        # Default should NOT include [TEST]
+        assert "[TEST]" not in result["text"]
+
+    def test_format_slack_message_works_with_all_optional_params(self, sample_earthquake):
+        """format_slack_message must accept all optional parameters."""
+        poi = PointOfInterest("Test", 37.8, -122.4, alert_radius_km=50)
+        result = format_slack_message(
+            sample_earthquake,
+            channel_name="test-channel",
+            nearby_pois=[(poi, 5.0)],
+            is_test=True,
+        )
+        assert "text" in result
+        assert "[TEST]" in result["text"]
+
+    def test_format_twitter_message_works_without_is_test(self, sample_earthquake):
+        """format_twitter_message must work without is_test parameter."""
+        result = format_twitter_message(sample_earthquake)
+        assert isinstance(result, str)
+        assert len(result) <= 280
+        assert "[TEST]" not in result
+
+    def test_format_twitter_message_works_with_all_optional_params(self, sample_earthquake):
+        """format_twitter_message must accept all optional parameters."""
+        poi = PointOfInterest("Test", 37.8, -122.4, alert_radius_km=50)
+        result = format_twitter_message(
+            sample_earthquake,
+            nearby_pois=[(poi, 5.0)],
+            is_test=True,
+        )
+        assert "[TEST]" in result
+
+    def test_format_whatsapp_message_works_without_is_test(self, sample_earthquake):
+        """format_whatsapp_message must work without is_test parameter."""
+        result = format_whatsapp_message(sample_earthquake)
+        assert isinstance(result, str)
+        assert "[TEST]" not in result
+
+    def test_format_whatsapp_message_works_with_all_optional_params(self, sample_earthquake):
+        """format_whatsapp_message must accept all optional parameters."""
+        poi = PointOfInterest("Test", 37.8, -122.4, alert_radius_km=50)
+        result = format_whatsapp_message(
+            sample_earthquake,
+            nearby_pois=[(poi, 5.0)],
+            is_test=True,
+        )
+        assert "[TEST]" in result
+
+
+class TestEdgeCases:
+    """Tests for edge cases and error conditions."""
+
+    def test_format_slack_message_with_none_felt(self):
+        """Should handle earthquake with no felt reports."""
+        earthquake = Earthquake(
+            id="test",
+            magnitude=3.0,
+            place="Somewhere",
+            time=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            latitude=37.0,
+            longitude=-122.0,
+            depth_km=10.0,
+            url="https://example.com",
+            felt=None,  # No felt reports
+            alert=None,  # No alert level
+            tsunami=False,
+        )
+        result = format_slack_message(earthquake)
+        assert "text" in result
+        # Should not contain "Felt by" since felt is None
+        all_text = str(result["blocks"])
+        assert "Felt by" not in all_text
+
+    def test_format_slack_message_with_no_url(self):
+        """Should handle earthquake with empty URL."""
+        earthquake = Earthquake(
+            id="test",
+            magnitude=3.0,
+            place="Somewhere",
+            time=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            latitude=37.0,
+            longitude=-122.0,
+            depth_km=10.0,
+            url="",  # Empty URL
+        )
+        result = format_slack_message(earthquake)
+        assert "text" in result
+
+    def test_format_twitter_message_with_long_location(self):
+        """Should handle very long location strings without exceeding 280 chars."""
+        earthquake = Earthquake(
+            id="test",
+            magnitude=5.5,
+            place="A Very Long Location Name That Goes On And On And Describes The Exact Position In Great Detail Near San Francisco California USA",
+            time=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            latitude=37.0,
+            longitude=-122.0,
+            depth_km=10.0,
+            url="https://earthquake.usgs.gov/earthquakes/eventpage/test",
+        )
+        result = format_twitter_message(earthquake)
+        assert len(result) <= 280
+
+    def test_format_whatsapp_message_with_all_alerts(self):
+        """Should handle earthquake with tsunami and high PAGER alert."""
+        earthquake = Earthquake(
+            id="test",
+            magnitude=7.5,
+            place="Major Earthquake Zone",
+            time=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            latitude=37.0,
+            longitude=-122.0,
+            depth_km=10.0,
+            url="https://example.com",
+            felt=5000,
+            alert="red",
+            tsunami=True,
+        )
+        result = format_whatsapp_message(earthquake)
+        assert "TSUNAMI" in result
+        assert "RED" in result
+        assert "5,000" in result  # Felt count formatted with comma
+
+    def test_format_slack_message_with_empty_pois_list(self, sample_earthquake):
+        """Should handle empty POI list gracefully."""
+        result = format_slack_message(sample_earthquake, nearby_pois=[])
+        assert "text" in result
+        # Should not have "Nearby Locations" section
+        all_text = str(result["blocks"])
+        assert "Nearby Locations" not in all_text
