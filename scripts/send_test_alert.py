@@ -1,12 +1,26 @@
 #!/usr/bin/env python3
 """Send test alerts to all configured channels.
 
-This script creates a synthetic test earthquake and sends alerts to ALL
-configured channels (Slack, Twitter, WhatsApp) using the same formatting
-as production alerts. The only difference is a [TEST] marker is added.
+⚠️  WARNING: This script sends REAL notifications to production channels!
+    - Slack: Messages real channels
+    - Twitter: Posts to @quake_alerts (PUBLIC!)
+    - WhatsApp: Sends to real phone numbers
+
+This script creates a synthetic test earthquake and sends alerts to configured
+channels using the same formatting as production alerts. A [TEST] marker is added.
 
 Usage:
-    python scripts/send_test_alert.py [--magnitude 5.5] [--location "8km NE of San Ramon, CA"]
+    # Dry run (preview only, no sends)
+    python scripts/send_test_alert.py --dry-run
+
+    # Send to Slack only (safest for testing)
+    python scripts/send_test_alert.py --slack-only
+
+    # Send to specific channel
+    python scripts/send_test_alert.py --channel earthquake-alerts
+
+    # Send to ALL channels including Twitter (requires explicit flag)
+    python scripts/send_test_alert.py --include-twitter
 
 Environment:
     CONFIG_PATH: Path to config file (default: config/config-production.yaml)
@@ -106,8 +120,12 @@ def send_slack_alert(earthquake: Earthquake, channel, config) -> bool:
 
 
 def send_twitter_alert(earthquake: Earthquake, channel, config) -> bool:
-    """Send test alert to Twitter."""
+    """Send test alert to Twitter.
+
+    ⚠️  WARNING: This posts to a PUBLIC Twitter account!
+    """
     logger.info("Sending test alert to Twitter channel: %s", channel.name)
+    logger.warning("  ⚠️  This will post to PUBLIC Twitter account!")
 
     if not channel.credentials:
         logger.error("  ✗ Twitter channel has no credentials")
@@ -237,7 +255,10 @@ def send_whatsapp_alert(earthquake: Earthquake, channel, config) -> bool:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Send test alerts to all configured channels")
+    parser = argparse.ArgumentParser(
+        description="Send test alerts to configured channels",
+        epilog="⚠️  WARNING: This sends REAL notifications! Use --dry-run first.",
+    )
     parser.add_argument(
         "--magnitude",
         type=float,
@@ -266,7 +287,17 @@ def main():
         "--channel",
         type=str,
         default=None,
-        help="Send to specific channel name only (default: all channels)",
+        help="Send to specific channel name only (default: all non-Twitter channels)",
+    )
+    parser.add_argument(
+        "--slack-only",
+        action="store_true",
+        help="Only send to Slack channels (safest option)",
+    )
+    parser.add_argument(
+        "--include-twitter",
+        action="store_true",
+        help="Include Twitter channels (POSTS PUBLICLY - requires explicit opt-in)",
     )
     parser.add_argument(
         "--dry-run",
@@ -301,13 +332,36 @@ def main():
     logger.info("  Felt Reports: %d", earthquake.felt)
     logger.info("")
 
-    # Filter channels if specific channel requested
+    # Filter channels based on flags
     channels = config.alert_channels
+
+    # Apply channel filter if specified
     if args.channel:
         channels = [c for c in channels if c.name == args.channel]
         if not channels:
             logger.error("Channel '%s' not found in configuration", args.channel)
             return 1
+
+    # Apply slack-only filter
+    if args.slack_only:
+        channels = [c for c in channels if c.channel_type == "slack"]
+        if not channels:
+            logger.error("No Slack channels found in configuration")
+            return 1
+
+    # Filter out Twitter unless explicitly included
+    if not args.include_twitter and not args.channel:
+        twitter_channels = [c for c in channels if c.channel_type == "twitter"]
+        if twitter_channels:
+            logger.warning("")
+            logger.warning("⚠️  SKIPPING %d Twitter channel(s) - they post PUBLICLY!", len(twitter_channels))
+            logger.warning("   To include Twitter, use: --include-twitter")
+            logger.warning("")
+        channels = [c for c in channels if c.channel_type != "twitter"]
+
+    if not channels:
+        logger.error("No channels to send to after filtering")
+        return 1
 
     logger.info("Sending test alerts to %d channel(s)...", len(channels))
     logger.info("")
@@ -315,7 +369,8 @@ def main():
     if args.dry_run:
         logger.info("DRY RUN - Would send to the following channels:")
         for channel in channels:
-            logger.info("  - %s (%s)", channel.name, channel.channel_type)
+            marker = "⚠️ PUBLIC" if channel.channel_type == "twitter" else ""
+            logger.info("  - %s (%s) %s", channel.name, channel.channel_type, marker)
         return 0
 
     # Send alerts to all channels
