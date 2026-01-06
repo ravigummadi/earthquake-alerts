@@ -484,9 +484,11 @@ class Orchestrator:
                     alerts_failed.append(result)
                     decision_failures.append(result)
 
-            # Only mark earthquake as alerted if ALL channels succeeded
-            # This ensures failed channels get retried on next poll
-            if decision_successes and not decision_failures:
+            # Mark earthquake as alerted if ANY channel succeeded
+            # This prevents duplicate alerts to successful channels
+            # Trade-off: failed channels won't retry, but this is acceptable
+            # to avoid spamming users with duplicates
+            if decision_successes:
                 if decision.earthquake not in successfully_alerted:
                     successfully_alerted.append(decision.earthquake)
 
