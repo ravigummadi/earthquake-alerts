@@ -22,7 +22,7 @@ monitoring_regions:
     bounds:
       min_latitude: 37.3
       max_latitude: 38.3
-      min_longitude: -122.5
+      min_longitude: -122.15
       max_longitude: -121.5
 
 # Points of interest for proximity alerts
@@ -60,5 +60,5 @@ alert_channels:
       bounds:
         min_latitude: 37.3
         max_latitude: 38.3
-        min_longitude: -122.5
+        min_longitude: -122.15
         max_longitude: -121.5
