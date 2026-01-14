@@ -19,7 +19,7 @@ firestore_collection: earthquake_alerts
 # Geographic regions to monitor
 monitoring_regions:
   - name: "San Ramon Area"
-    bounds:
+    bounds: &san_ramon_bounds
       min_latitude: 37.3
       max_latitude: 38.3
       min_longitude: -122.15
@@ -41,11 +41,7 @@ alert_channels:
     webhook_url: "${secret:slack-webhook-url}"
     rules:
       min_magnitude: 2.5
-      bounds:
-        min_latitude: 37.3
-        max_latitude: 38.3
-        min_longitude: -122.5
-        max_longitude: -121.5
+      bounds: *san_ramon_bounds
 
   # Twitter/X public alerts - @quake_alerts
   - name: "quake-alerts-twitter"
@@ -57,8 +53,4 @@ alert_channels:
       access_token_secret: "${secret:twitter-access-token-secret}"
     rules:
       min_magnitude: 2.5
-      bounds:
-        min_latitude: 37.3
-        max_latitude: 38.3
-        min_longitude: -122.15
-        max_longitude: -121.5
+      bounds: *san_ramon_bounds
