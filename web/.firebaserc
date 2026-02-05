@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "earthquake-city"
+  },
+  "targets": {
+    "earthquake-city": {
+      "hosting": {
+        "earthquake-city": [
+          "earthquake-city"
+        ]
+      }
+    }
+  }
+}
