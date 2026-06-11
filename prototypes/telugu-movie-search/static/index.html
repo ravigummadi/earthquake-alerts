@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telugu Movie Search</title>
+<style>
+  :root {
+    --blue: #1a73e8; --green: #006621; --grey: #70757a; --text: #202124;
+    --g1: #4285f4; --g2: #ea4335; --g3: #fbbc05; --g4: #34a853;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: arial, sans-serif; color: var(--text); }
+  a { text-decoration: none; }
+
+  /* ---------- home (centered) vs results (top bar) ---------- */
+  #home { display: flex; flex-direction: column; align-items: center;
+          justify-content: center; min-height: 78vh; }
+  body.results-mode #home { display: none; }
+  #topbar { display: none; padding: 20px 0 0 28px; border-bottom: 1px solid #ebebeb;
+            position: sticky; top: 0; background: #fff; z-index: 5; }
+  body.results-mode #topbar { display: flex; align-items: flex-start; gap: 28px; }
+
+  .logo { font-size: 84px; font-weight: 600; letter-spacing: -3px; user-select: none; }
+  .logo span:nth-child(6n+1) { color: var(--g1); }
+  .logo span:nth-child(6n+2) { color: var(--g2); }
+  .logo span:nth-child(6n+3) { color: var(--g3); }
+  .logo span:nth-child(6n+4) { color: var(--g1); }
+  .logo span:nth-child(6n+5) { color: var(--g4); }
+  .logo span:nth-child(6n+6) { color: var(--g2); }
+  .logo small { font-size: 26px; color: var(--grey); letter-spacing: 0;
+                font-weight: 400; vertical-align: super; margin-left: 8px; }
+  #topbar .logo { font-size: 28px; letter-spacing: -1px; margin-top: 7px; cursor: pointer; }
+  #topbar .logo small { font-size: 12px; }
+
+  .searchwrap { position: relative; width: min(584px, 90vw); }
+  .searchbox { display: flex; align-items: center; width: 100%; padding: 0 16px;
+               height: 46px; border: 1px solid #dfe1e5; border-radius: 24px; background: #fff; }
+  .searchbox:hover, .searchbox:focus-within { box-shadow: 0 1px 6px rgba(32,33,36,.28); border-color: transparent; }
+  .searchbox svg { flex: none; margin-right: 12px; }
+  .searchbox input { flex: 1; border: 0; outline: 0; font-size: 16px; background: transparent; }
+
+  .sugg { position: absolute; left: 0; right: 0; top: 100%; background: #fff; z-index: 10;
+          border: 1px solid #dfe1e5; border-top: 0; border-radius: 0 0 24px 24px;
+          box-shadow: 0 4px 6px rgba(32,33,36,.28); overflow: hidden; display: none; }
+  .sugg div { padding: 8px 20px; font-size: 15px; cursor: pointer; }
+  .sugg div:hover, .sugg div.active { background: #f1f3f4; }
+  .searchwrap.open .searchbox { border-radius: 24px 24px 0 0; }
+
+  .buttons { margin-top: 28px; display: flex; gap: 12px; }
+  .buttons button { background: #f8f9fa; border: 1px solid #f8f9fa; border-radius: 4px;
+                    color: #3c4043; font-size: 14px; padding: 0 16px; height: 36px; cursor: pointer; }
+  .buttons button:hover { border-color: #dadce0; box-shadow: 0 1px 1px rgba(0,0,0,.1); }
+  .chips { margin-top: 26px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .chip { border: 1px solid #dadce0; border-radius: 16px; padding: 6px 14px; font-size: 13px;
+          color: #3c4043; cursor: pointer; background: #fff; }
+  .chip:hover { background: #f1f3f4; }
+  .hint { margin-top: 30px; color: var(--grey); font-size: 12.5px; max-width: 560px;
+          text-align: center; line-height: 1.7; }
+  .hint code { background: #f1f3f4; padding: 1px 6px; border-radius: 4px; }
+
+  /* ---------- results ---------- */
+  #main { display: none; padding: 0 28px 60px 180px; max-width: 1100px; }
+  body.results-mode #main { display: flex; gap: 48px; }
+  @media (max-width: 900px) { #main { padding-left: 28px; flex-direction: column; } }
+  #results { flex: 1; min-width: 0; max-width: 600px; }
+  #stats { color: var(--grey); font-size: 13px; padding: 14px 0 6px; }
+  #dym { font-size: 16px; padding: 6px 0; display: none; }
+  #dym a { color: var(--blue); font-style: italic; font-weight: bold; cursor: pointer; }
+
+  .result { margin: 22px 0; }
+  .result .crumb { font-size: 13px; color: var(--text); }
+  .result .crumb cite { font-style: normal; color: var(--green); }
+  .result h3 { margin: 2px 0 4px; font-size: 20px; font-weight: 400; }
+  .result h3 a { color: #1a0dab; cursor: pointer; }
+  .result h3 a:hover { text-decoration: underline; }
+  .result h3 .te { color: var(--grey); font-size: 15px; margin-left: 10px; }
+  .result .snippet { font-size: 14px; line-height: 1.57; color: #4d5156; }
+  .result .meta { font-size: 13px; color: var(--grey); margin-top: 3px; }
+  .result .meta b.star { color: #fbbc05; }
+
+  #pager { margin-top: 34px; font-size: 15px; }
+  #pager a { color: var(--blue); margin-right: 18px; cursor: pointer; }
+  #empty { margin-top: 40px; font-size: 15px; line-height: 1.8; }
+
+  /* knowledge panel */
+  #panel { width: 360px; flex: none; border: 1px solid #dfe1e5; border-radius: 12px;
+           height: fit-content; margin-top: 20px; overflow: hidden; display: none; }
+  #panel .poster { height: 150px; display: flex; align-items: center; justify-content: center;
+                   font-size: 44px; color: #fff; font-weight: 700; text-shadow: 0 2px 8px rgba(0,0,0,.35);
+                   background: linear-gradient(135deg, #4285f4, #9b59b6, #ea4335); }
+  #panel .body { padding: 16px 20px 20px; }
+  #panel h2 { margin: 0; font-size: 24px; font-weight: 400; }
+  #panel .sub { color: var(--grey); font-size: 13px; margin: 4px 0 12px; }
+  #panel p { font-size: 14px; line-height: 1.55; color: #4d5156; }
+  #panel table { font-size: 14px; border-spacing: 0 6px; }
+  #panel td:first-child { color: var(--grey); padding-right: 14px; white-space: nowrap; vertical-align: top; }
+  @media (max-width: 900px) { #panel { width: 100%; } }
+
+  footer { position: fixed; bottom: 0; left: 0; right: 0; background: #f2f2f2;
+           color: var(--grey); font-size: 13px; padding: 12px 28px; }
+  body.results-mode footer { display: none; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="logo" onclick="goHome()"></div>
+  <div class="searchwrap" id="wrap2"></div>
+</div>
+
+<div id="home">
+  <div class="logo"></div>
+  <div class="searchwrap" id="wrap1"></div>
+  <div class="buttons">
+    <button onclick="submitQuery()">Telugu Movie Search</button>
+    <button onclick="feelingLucky()">I'm Feeling Lucky</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="hint">
+    Try operators: <code>director:rajamouli after:2010</code> ·
+    <code>genre:comedy</code> · <code>actor:prabhas</code> · <code>year:2018</code><br>
+    Typo-tolerant: <code>bahubali</code>, <code>rajamowli</code>, <code>pushpha</code> all work.
+  </div>
+</div>
+
+<div id="main">
+  <div id="results">
+    <div id="stats"></div>
+    <div id="dym">Did you mean: <a id="dymlink"></a></div>
+    <div id="list"></div>
+    <div id="pager"></div>
+  </div>
+  <div id="panel"></div>
+</div>
+
+<footer>Telugu Movie Search — a self-contained search-engine prototype. BM25 ranking · transliteration-aware · zero dependencies.</footer>
+
+<script>
+const LOGO_TEXT = "Telugu";
+const CHIPS = ["Rajamouli films", "genre:Comedy after:2015", "Mahesh Babu", "classics before:1990", "Sai Pallavi", "genre:Thriller"];
+const PAGE = 10;
+let state = { q: "", offset: 0 };
+
+document.querySelectorAll(".logo").forEach(el => {
+  el.innerHTML = [...LOGO_TEXT].map(c => `<span>${c}</span>`).join("") + "<small>movies</small>";
+});
+document.getElementById("chips").innerHTML =
+  CHIPS.map(c => `<span class="chip" onclick="runQuery('${c}')">${c}</span>`).join("");
+
+// Two synced search boxes (home + topbar), each with a suggestion dropdown.
+function buildSearchBox(wrapId) {
+  const wrap = document.getElementById(wrapId);
+  wrap.innerHTML = `
+    <div class="searchbox">
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#9aa0a6"
+        d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
+      <input autocomplete="off" spellcheck="false" aria-label="Search Telugu movies">
+    </div>
+    <div class="sugg"></div>`;
+  const input = wrap.querySelector("input");
+  const sugg = wrap.querySelector(".sugg");
+  let items = [], active = -1, timer = null;
+
+  function close() { sugg.style.display = "none"; wrap.classList.remove("open"); active = -1; }
+  function render() {
+    if (!items.length) return close();
+    sugg.innerHTML = items.map((s, i) =>
+      `<div class="${i === active ? "active" : ""}" data-i="${i}">${s}</div>`).join("");
+    sugg.style.display = "block";
+    wrap.classList.add("open");
+    sugg.querySelectorAll("div").forEach(d =>
+      d.onmousedown = () => { pick(items[+d.dataset.i]); });
+  }
+  function pick(s) { close(); runQuery(s.split(" — ")[0]); }
+
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const v = input.value.trim();
+    if (!v) return close();
+    timer = setTimeout(async () => {
+      const r = await fetch(`/api/suggest?q=${encodeURIComponent(v)}`).then(r => r.json());
+      items = r.suggestions; active = -1; render();
+    }, 120);
+  });
+  input.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown" && items.length) { active = (active + 1) % items.length; render(); e.preventDefault(); }
+    else if (e.key === "ArrowUp" && items.length) { active = (active - 1 + items.length) % items.length; render(); e.preventDefault(); }
+    else if (e.key === "Enter") { active >= 0 ? pick(items[active]) : runQuery(input.value); close(); }
+    else if (e.key === "Escape") close();
+  });
+  input.addEventListener("blur", () => setTimeout(close, 150));
+  return input;
+}
+const input1 = buildSearchBox("wrap1");
+const input2 = buildSearchBox("wrap2");
+
+function submitQuery() { runQuery(input1.value); }
+async function feelingLucky() {
+  const q = input1.value.trim() || CHIPS[Math.floor(Math.random() * CHIPS.length)];
+  runQuery(q);
+}
+function goHome() {
+  document.body.classList.remove("results-mode");
+  history.pushState({}, "", "/");
+  input1.value = ""; input1.focus();
+}
+
+function runQuery(q, offset = 0) {
+  q = (q || "").trim();
+  if (!q) return;
+  state = { q, offset };
+  input1.value = q; input2.value = q;
+  history.pushState({}, "", `/?q=${encodeURIComponent(q)}${offset ? "&offset=" + offset : ""}`);
+  doSearch();
+}
+
+async function doSearch() {
+  const { q, offset } = state;
+  const data = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=${PAGE}&offset=${offset}`)
+    .then(r => r.json());
+  document.body.classList.add("results-mode");
+
+  document.getElementById("stats").textContent =
+    `About ${data.total} result${data.total === 1 ? "" : "s"} (${(data.took_ms / 1000).toFixed(3)} seconds)`;
+
+  const dym = document.getElementById("dym");
+  if (data.did_you_mean) {
+    dym.style.display = "block";
+    const link = document.getElementById("dymlink");
+    link.textContent = data.did_you_mean;
+    link.onclick = () => runQuery(data.did_you_mean);
+  } else dym.style.display = "none";
+
+  const list = document.getElementById("list");
+  if (!data.results.length) {
+    list.innerHTML = `<div id="empty">Your search — <b>${esc(q)}</b> — did not match any movies.<br>
+      Suggestions: check the spelling, drop filters, or try a broader term like a genre or an actor.</div>`;
+  } else {
+    list.innerHTML = data.results.map(m => `
+      <div class="result">
+        <div class="crumb"><cite>teluguflix.example.com › movies › ${m.year} › ${slug(m.title)}</cite></div>
+        <h3><a onclick='showPanel(${JSON.stringify(m).replace(/'/g, "&#39;")})'>${esc(m.title)} (${m.year})<span class="te">${m.telugu}</span></a></h3>
+        <div class="snippet">${m.snippet}</div>
+        <div class="meta"><b class="star">★</b> ${m.rating.toFixed(1)} · ${m.genres.join(", ")} ·
+          Dir. ${esc(m.director)} · ${esc(m.cast.slice(0, 3).join(", "))}</div>
+      </div>`).join("");
+  }
+
+  const pager = document.getElementById("pager");
+  let p = "";
+  if (offset > 0) p += `<a onclick="runQuery(state.q, ${Math.max(0, offset - PAGE)})">‹ Previous</a>`;
+  if (offset + PAGE < data.total) p += `<a onclick="runQuery(state.q, ${offset + PAGE})">Next ›</a>`;
+  pager.innerHTML = p;
+
+  // Knowledge panel for a confident top hit on the first page.
+  const panel = document.getElementById("panel");
+  if (offset === 0 && data.results.length && (data.results.length === 1 || data.results[0].score >= 2 * (data.results[1]?.score || 0.01))) {
+    showPanel(data.results[0]);
+  } else panel.style.display = "none";
+  window.scrollTo(0, 0);
+}
+
+function showPanel(m) {
+  const panel = document.getElementById("panel");
+  panel.innerHTML = `
+    <div class="poster">${m.telugu}</div>
+    <div class="body">
+      <h2>${esc(m.title)}</h2>
+      <div class="sub">${m.year} ‧ ${m.genres.join("/")} ‧ ${Math.floor(m.runtime / 60)}h ${m.runtime % 60}m</div>
+      <p>${esc(m.plot)}</p>
+      <table>
+        <tr><td>Rating</td><td><b>★ ${m.rating.toFixed(1)}</b>/10</td></tr>
+        <tr><td>Director</td><td><a onclick="runQuery('director:&quot;${esc(m.director)}&quot;')" style="color:var(--blue);cursor:pointer">${esc(m.director)}</a></td></tr>
+        <tr><td>Cast</td><td>${m.cast.map(c => `<a onclick="runQuery('${esc(c)}')" style="color:var(--blue);cursor:pointer">${esc(c)}</a>`).join(", ")}</td></tr>
+        <tr><td>Music</td><td>${esc(m.music)}</td></tr>
+      </table>
+    </div>`;
+  panel.style.display = "block";
+}
+
+function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
+function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+
+// Deep-link support: /?q=...
+const params = new URLSearchParams(location.search);
+if (params.get("q")) runQuery(params.get("q"), +(params.get("offset") || 0));
+else input1.focus();
+window.addEventListener("popstate", () => {
+  const p = new URLSearchParams(location.search);
+  p.get("q") ? runQuery(p.get("q"), +(p.get("offset") || 0)) : goHome();
+});
+</script>
+</body>
+</html>
