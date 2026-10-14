@@ -167,3 +167,70 @@ class TestComputeIdsToExpire:
         result = compute_ids_to_expire(stored, current, max_stored=3)
 
         assert result == set()
+
+
+class TestRepeatedIdsEdgeCases:
+    """Edge cases for deduplication with repeated IDs and boundary conditions."""
+
+    def test_get_earthquake_ids_deduplicates_repeated_instances(self, sample_earthquake):
+        """get_earthquake_ids returns unique set even if earthquake list has duplicates."""
+        eq1 = sample_earthquake
+        eq2 = Earthquake(**{**sample_earthquake.__dict__, "id": "eq2"})
+        earthquake_list = [eq1, eq1, eq2, eq1, eq2]
+
+        result = get_earthquake_ids(earthquake_list)
+        assert result == {"eq1", "eq2"}
+
+    def test_filter_already_alerted_drops_all_duplicates_of_alerted_id(self, sample_earthquake):
+        """filter_already_alerted eliminates every duplicate instance of an alerted ID."""
+        eq1 = sample_earthquake  # id="eq1"
+        eq2 = Earthquake(**{**sample_earthquake.__dict__, "id": "eq2"})
+        earthquake_list = [eq1, eq1, eq2, eq1]
+
+        result = filter_already_alerted(earthquake_list, {"eq1"})
+        assert len(result) == 1
+        assert result[0].id == "eq2"
+
+    def test_filter_already_alerted_retains_duplicates_if_not_alerted(self, sample_earthquake):
+        """filter_already_alerted retains all items if ID is not yet alerted."""
+        eq1 = sample_earthquake
+        earthquake_list = [eq1, eq1]
+
+        result = filter_already_alerted(earthquake_list, set())
+        assert len(result) == 2
+        assert result[0].id == "eq1"
+        assert result[1].id == "eq1"
+
+    def test_compute_ids_to_store_deduplicates_repeated_earthquakes(self, sample_earthquake):
+        """compute_ids_to_store collapses repeated earthquakes into a single set of IDs."""
+        eq1 = sample_earthquake
+        eq2 = Earthquake(**{**sample_earthquake.__dict__, "id": "eq2"})
+        result = compute_ids_to_store([eq1, eq1, eq2, eq2, eq1])
+        assert result == {"eq1", "eq2"}
+
+    def test_compute_ids_to_expire_never_expires_current_even_over_limit(self):
+        """Current earthquake IDs are never expired, even if stored count exceeds max_stored."""
+        stored = {"eq1", "eq2", "eq3", "eq4"}
+        current = {"eq1", "eq2", "eq3", "eq4"}
+        result = compute_ids_to_expire(stored, current, max_stored=2)
+        assert result == set()
+
+    def test_compute_ids_to_expire_excess_greater_than_available_expirables(self):
+        """Handles scenario where excess count exceeds the number of non-current IDs."""
+        stored = {"eq1", "eq2", "eq3", "eq4", "eq5"}
+        current = {"eq1", "eq2", "eq3", "eq4"}  # Only eq5 is expirable
+        # max_stored=2 -> excess = 5 - 2 = 3. Only 1 ID is expirable.
+        result = compute_ids_to_expire(stored, current, max_stored=2)
+        assert result == {"eq5"}
+
+    def test_compute_ids_to_expire_zero_max_stored(self):
+        """max_stored=0 expires all expirable IDs."""
+        stored = {"eq1", "eq2"}
+        current = set()
+        result = compute_ids_to_expire(stored, current, max_stored=0)
+        assert result == {"eq1", "eq2"}
+
+    def test_compute_ids_to_expire_empty_stored(self):
+        """Empty stored set returns empty set."""
+        result = compute_ids_to_expire(set(), {"eq1"}, max_stored=10)
+        assert result == set()

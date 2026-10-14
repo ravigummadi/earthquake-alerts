@@ -319,3 +319,103 @@ class TestCombineBounds:
         assert result.max_latitude == 39.0
         assert result.min_longitude == -123.0
         assert result.max_longitude == -120.0
+
+
+class TestPoiDistanceThresholdEdgeCases:
+    """Edge cases for distance thresholds and boundary conditions in geo module."""
+
+    def test_exact_distance_threshold_is_within_radius(self, sample_earthquake):
+        """Earthquake at exactly the threshold distance is considered within radius."""
+        target_lat = 37.8044
+        target_lon = -122.2712
+        actual_distance = calculate_distance(
+            sample_earthquake.latitude,
+            sample_earthquake.longitude,
+            target_lat,
+            target_lon,
+        )
+
+        # Exact distance threshold (inclusive <=)
+        assert is_within_radius(
+            sample_earthquake, target_lat, target_lon, radius_km=actual_distance
+        ) is True
+
+        # Just 1 millimeter below the actual distance
+        assert is_within_radius(
+            sample_earthquake, target_lat, target_lon, radius_km=actual_distance - 0.000001
+        ) is False
+
+        # Just 1 millimeter above the actual distance
+        assert is_within_radius(
+            sample_earthquake, target_lat, target_lon, radius_km=actual_distance + 0.000001
+        ) is True
+
+    def test_zero_radius_behavior(self, sample_earthquake):
+        """A radius of 0.0 km matches identical point and rejects any offset."""
+        # Identical point matches because distance is 0.0 <= 0.0
+        assert is_within_radius(
+            sample_earthquake,
+            sample_earthquake.latitude,
+            sample_earthquake.longitude,
+            radius_km=0.0,
+        ) is True
+
+        # Offset by small fraction of degree (~11 meters) fails
+        assert is_within_radius(
+            sample_earthquake,
+            sample_earthquake.latitude + 0.0001,
+            sample_earthquake.longitude,
+            radius_km=0.0,
+        ) is False
+
+    def test_filter_by_proximity_at_exact_threshold(self, sample_earthquake):
+        """filter_by_proximity correctly includes exact boundary match and excludes offset."""
+        poi_lat = 37.8
+        poi_lon = -122.4
+        exact_distance = calculate_distance(
+            sample_earthquake.latitude,
+            sample_earthquake.longitude,
+            poi_lat,
+            poi_lon,
+        )
+
+        poi = PointOfInterest("Target", poi_lat, poi_lon, alert_radius_km=exact_distance)
+
+        earthquake_outside = Earthquake(
+            **{
+                **sample_earthquake.__dict__,
+                "id": "slightly_outside",
+                "latitude": sample_earthquake.latitude - 0.05,  # moves further south away from POI at 37.8
+            }
+        )
+
+        result = filter_by_proximity([sample_earthquake, earthquake_outside], poi)
+        assert len(result) == 1
+        assert result[0].id == sample_earthquake.id
+
+    def test_bounding_box_corners_and_edges(self):
+        """BoundingBox.contains correctly treats all 4 edges and corners as inclusive."""
+        box = BoundingBox(
+            min_latitude=10.0,
+            max_latitude=20.0,
+            min_longitude=-120.0,
+            max_longitude=-110.0,
+        )
+
+        # 4 corners
+        assert box.contains(10.0, -120.0) is True
+        assert box.contains(10.0, -110.0) is True
+        assert box.contains(20.0, -120.0) is True
+        assert box.contains(20.0, -110.0) is True
+
+        # 4 edge midpoints
+        assert box.contains(10.0, -115.0) is True  # South
+        assert box.contains(20.0, -115.0) is True  # North
+        assert box.contains(15.0, -120.0) is True  # West
+        assert box.contains(15.0, -110.0) is True  # East
+
+        # Points just outside each of the 4 borders
+        assert box.contains(9.9999, -115.0) is False   # Just south
+        assert box.contains(20.0001, -115.0) is False  # Just north
+        assert box.contains(15.0, -120.0001) is False  # Just west
+        assert box.contains(15.0, -109.9999) is False  # Just east

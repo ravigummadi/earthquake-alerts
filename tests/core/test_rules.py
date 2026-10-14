@@ -15,6 +15,9 @@ from src.core.rules import (
     evaluate_rules,
     filter_earthquakes_by_rules,
     make_alert_decisions,
+    matches_magnitude_rule,
+    matches_location_rule,
+    matches_special_conditions,
 )
 
 
@@ -256,3 +259,128 @@ class TestMakeAlertDecisions:
         decisions = make_alert_decisions(earthquakes, channels)
 
         assert all(d.should_alert for d in decisions)
+
+
+class TestMagnitudeBoundaryEdgeCases:
+    """Edge case tests for magnitude boundaries in alert rules."""
+
+    def test_exact_min_magnitude_boundary_matches(self, sample_earthquake):
+        """Magnitude exactly equal to min_magnitude matches."""
+        eq = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 4.0})
+        rule = AlertRule(min_magnitude=4.0)
+        assert matches_magnitude_rule(eq, rule) is True
+
+    def test_just_below_min_magnitude_boundary_fails(self, sample_earthquake):
+        """Magnitude just below min_magnitude does not match."""
+        eq = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 3.999})
+        rule = AlertRule(min_magnitude=4.0)
+        assert matches_magnitude_rule(eq, rule) is False
+
+    def test_exact_max_magnitude_boundary_matches(self, sample_earthquake):
+        """Magnitude exactly equal to max_magnitude matches."""
+        eq = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 6.0})
+        rule = AlertRule(min_magnitude=2.0, max_magnitude=6.0)
+        assert matches_magnitude_rule(eq, rule) is True
+
+    def test_just_above_max_magnitude_boundary_fails(self, sample_earthquake):
+        """Magnitude just above max_magnitude does not match."""
+        eq = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 6.001})
+        rule = AlertRule(min_magnitude=2.0, max_magnitude=6.0)
+        assert matches_magnitude_rule(eq, rule) is False
+
+    def test_min_and_max_magnitude_equal(self, sample_earthquake):
+        """Single-point range (min == max) matches only the exact value."""
+        rule = AlertRule(min_magnitude=5.0, max_magnitude=5.0)
+
+        eq_match = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 5.0})
+        eq_below = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 4.99})
+        eq_above = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 5.01})
+
+        assert matches_magnitude_rule(eq_match, rule) is True
+        assert matches_magnitude_rule(eq_below, rule) is False
+        assert matches_magnitude_rule(eq_above, rule) is False
+
+    def test_negative_magnitude_boundaries(self, sample_earthquake):
+        """Negative magnitude earthquakes (micro-quakes) evaluated correctly."""
+        rule = AlertRule(min_magnitude=-1.0, max_magnitude=0.0)
+
+        eq_at_min = Earthquake(**{**sample_earthquake.__dict__, "magnitude": -1.0})
+        eq_below_min = Earthquake(**{**sample_earthquake.__dict__, "magnitude": -1.01})
+        eq_mid = Earthquake(**{**sample_earthquake.__dict__, "magnitude": -0.5})
+        eq_at_max = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 0.0})
+        eq_above_max = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 0.01})
+
+        assert matches_magnitude_rule(eq_at_min, rule) is True
+        assert matches_magnitude_rule(eq_below_min, rule) is False
+        assert matches_magnitude_rule(eq_mid, rule) is True
+        assert matches_magnitude_rule(eq_at_max, rule) is True
+        assert matches_magnitude_rule(eq_above_max, rule) is False
+
+    def test_felt_threshold_exact_boundary(self, sample_earthquake):
+        """Felt report threshold matches at exact boundary and handles None/0."""
+        rule = AlertRule(min_magnitude=5.0, alert_on_felt=True, felt_threshold=10)
+
+        eq_exact = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 2.0, "felt": 10})
+        eq_below = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 2.0, "felt": 9})
+        eq_zero = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 2.0, "felt": 0})
+        eq_none = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 2.0, "felt": None})
+
+        assert matches_special_conditions(eq_exact, rule) is True
+        assert matches_special_conditions(eq_below, rule) is False
+        assert matches_special_conditions(eq_zero, rule) is False
+        assert matches_special_conditions(eq_none, rule) is False
+
+    def test_tsunami_override_with_zero_or_negative_magnitude(self, sample_earthquake):
+        """Tsunami warning overrides magnitude checks even for zero/negative magnitudes."""
+        rule = AlertRule(min_magnitude=6.0, alert_on_tsunami=True)
+
+        eq_zero = Earthquake(**{**sample_earthquake.__dict__, "magnitude": 0.0, "tsunami": True})
+        eq_neg = Earthquake(**{**sample_earthquake.__dict__, "magnitude": -0.5, "tsunami": True})
+
+        assert evaluate_rule(eq_zero, rule) is True
+        assert evaluate_rule(eq_neg, rule) is True
+
+
+class TestPoiDistanceThresholdRules:
+    """Edge case tests for POI distance thresholds in alert rules."""
+
+    def test_poi_exact_radius_threshold_matches(self, sample_earthquake):
+        """Earthquake exactly on the alert radius boundary matches."""
+        # Calculate point at known distance
+        poi = PointOfInterest(
+            name="Center",
+            latitude=sample_earthquake.latitude,
+            longitude=sample_earthquake.longitude,
+            alert_radius_km=0.0,
+        )
+        rule = AlertRule(points_of_interest=(poi,))
+        assert matches_location_rule(sample_earthquake, rule) is True
+
+    def test_poi_just_outside_threshold_fails(self, sample_earthquake):
+        """Earthquake just outside POI radius does not match."""
+        # 1 degree of latitude is ~111 km
+        poi = PointOfInterest(
+            name="Near",
+            latitude=sample_earthquake.latitude + 0.1,  # ~11.1 km away
+            longitude=sample_earthquake.longitude,
+            alert_radius_km=5.0,  # 5 km threshold is exceeded
+        )
+        rule = AlertRule(points_of_interest=(poi,))
+        assert matches_location_rule(sample_earthquake, rule) is False
+
+    def test_multiple_pois_one_matching_at_threshold(self, sample_earthquake):
+        """If one of multiple POIs matches threshold, location rule passes."""
+        poi_far = PointOfInterest(
+            name="Far",
+            latitude=0.0,
+            longitude=0.0,
+            alert_radius_km=50.0,
+        )
+        poi_exact = PointOfInterest(
+            name="Exact",
+            latitude=sample_earthquake.latitude,
+            longitude=sample_earthquake.longitude,
+            alert_radius_km=0.0,
+        )
+        rule = AlertRule(points_of_interest=(poi_far, poi_exact))
+        assert matches_location_rule(sample_earthquake, rule) is True
