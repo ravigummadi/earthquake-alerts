@@ -77,6 +77,15 @@ def whatsapp_credentials():
     )
 
 
+
+@pytest.fixture(autouse=True)
+def _block_real_network():
+    """Fail loudly if any test reaches a real Slack/HTTP request."""
+    def _no_network(*args, **kwargs):
+        raise AssertionError("test attempted a real network request")
+    with patch("src.shell.slack_client.requests.post", side_effect=_no_network):
+        yield
+
 @pytest.fixture
 def sample_config(sample_slack_channel):
     """Create a standard Config instance for testing."""
