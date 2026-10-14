@@ -1,12 +1,28 @@
 "use client";
 
 import { getMagnitudeClass, type Earthquake } from "@/lib/api";
+import {
+  distanceFromCenterMiles,
+  formatDepth,
+  formatDistance,
+  localizePlace,
+  type DistanceUnit,
+  type LatLng,
+} from "@/lib/geo";
 
 interface EarthquakeTableProps {
   earthquakes: Earthquake[];
+  /** Locale center; when provided, a "Distance" column is shown. */
+  center?: LatLng;
+  /** Unit for distance/depth and the USGS place string. Defaults to miles. */
+  distanceUnit?: DistanceUnit;
 }
 
-export default function EarthquakeTable({ earthquakes }: EarthquakeTableProps) {
+export default function EarthquakeTable({
+  earthquakes,
+  center,
+  distanceUnit = "mi",
+}: EarthquakeTableProps) {
   if (earthquakes.length === 0) {
     return (
       <div className="card p-6 text-center text-slate-400">
@@ -30,6 +46,11 @@ export default function EarthquakeTable({ earthquakes }: EarthquakeTableProps) {
               <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider hidden md:table-cell">
                 Date & Time
               </th>
+              {center && (
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                  Distance
+                </th>
+              )}
               <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider hidden sm:table-cell">
                 Depth
               </th>
@@ -40,7 +61,12 @@ export default function EarthquakeTable({ earthquakes }: EarthquakeTableProps) {
           </thead>
           <tbody className="divide-y divide-slate-800/50">
             {earthquakes.map((eq) => (
-              <EarthquakeRow key={eq.id} earthquake={eq} />
+              <EarthquakeRow
+                key={eq.id}
+                earthquake={eq}
+                center={center}
+                distanceUnit={distanceUnit}
+              />
             ))}
           </tbody>
         </table>
@@ -49,7 +75,15 @@ export default function EarthquakeTable({ earthquakes }: EarthquakeTableProps) {
   );
 }
 
-function EarthquakeRow({ earthquake }: { earthquake: Earthquake }) {
+function EarthquakeRow({
+  earthquake,
+  center,
+  distanceUnit,
+}: {
+  earthquake: Earthquake;
+  center?: LatLng;
+  distanceUnit: DistanceUnit;
+}) {
   const magnitudeClass = getMagnitudeClass(earthquake.magnitude);
   const date = new Date(earthquake.time);
 
@@ -72,7 +106,9 @@ function EarthquakeRow({ earthquake }: { earthquake: Earthquake }) {
         </span>
       </td>
       <td className="px-4 py-3">
-        <span className="text-white font-medium">{earthquake.place}</span>
+        <span className="text-white font-medium">
+          {localizePlace(earthquake.place, distanceUnit)}
+        </span>
         {earthquake.tsunami && (
           <span className="ml-2 text-xs text-red-400 font-medium">TSUNAMI</span>
         )}
@@ -80,8 +116,13 @@ function EarthquakeRow({ earthquake }: { earthquake: Earthquake }) {
       <td className="px-4 py-3 text-slate-400 hidden md:table-cell">
         {formattedDate} at {formattedTime}
       </td>
+      {center && (
+        <td className="px-4 py-3 text-slate-400">
+          {formatDistance(distanceFromCenterMiles(earthquake, center), distanceUnit)}
+        </td>
+      )}
       <td className="px-4 py-3 text-slate-400 hidden sm:table-cell">
-        {earthquake.depth_km.toFixed(1)} km
+        {formatDepth(earthquake.depth_km, distanceUnit)}
       </td>
       <td className="px-4 py-3 text-right">
         <a

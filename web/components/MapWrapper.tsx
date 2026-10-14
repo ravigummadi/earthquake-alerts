@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { type Earthquake } from "@/lib/api";
+import { type DistanceUnit } from "@/lib/geo";
 
 const EarthquakeMap = dynamic(() => import("./EarthquakeMap"), {
   ssr: false,
@@ -15,8 +16,9 @@ const EarthquakeMap = dynamic(() => import("./EarthquakeMap"), {
 interface MapWrapperProps {
   earthquake: Earthquake | null;
   center: { lat: number; lng: number };
+  distanceUnit?: DistanceUnit;
 }
 
-export default function MapWrapper({ earthquake, center }: MapWrapperProps) {
-  return <EarthquakeMap earthquake={earthquake} center={center} />;
+export default function MapWrapper({ earthquake, center, distanceUnit }: MapWrapperProps) {
+  return <EarthquakeMap earthquake={earthquake} center={center} distanceUnit={distanceUnit} />;
 }

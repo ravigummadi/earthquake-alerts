@@ -31,6 +31,8 @@ export interface Region {
     max_longitude: number;
   };
   center: { lat: number; lng: number };
+  /** Optional per-locale display radius. Not yet served by the API; see lib/geo.ts. */
+  radius_miles?: number | null;
 }
 
 export interface EarthquakeResponse {
@@ -60,6 +62,8 @@ export interface LocaleConfig {
   };
   center: { lat: number; lng: number };
   min_magnitude: number;
+  /** Optional per-locale display radius. Not yet served by the API; see lib/geo.ts. */
+  radius_miles?: number | null;
 }
 
 export interface LocalesResponse {
@@ -139,17 +143,39 @@ export function getMagnitudeColor(magnitude: number): string {
 }
 
 /**
- * Fetch recent earthquakes for a locale.
+ * Maximum `limit` accepted by /api-recent-earthquakes. The locale page fetches
+ * this many so it has enough candidates left after radius filtering.
+ */
+export const RECENT_EARTHQUAKES_MAX_LIMIT = 50;
+
+export interface FetchRecentOptions {
+  signal?: AbortSignal;
+  /** Append a timestamp and bypass caches (used when arriving from an alert link). */
+  bustCache?: boolean;
+}
+
+/**
+ * Fetch recent earthquakes for a locale (newest first, within the locale's
+ * API bounding box). Radius filtering happens client-side in lib/geo.ts.
  */
 export async function fetchRecentEarthquakes(
   localeSlug: string,
   limit: number = 10,
-  signal?: AbortSignal
+  options: FetchRecentOptions | AbortSignal = {}
 ): Promise<RecentEarthquakesResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api-recent-earthquakes?locale=${localeSlug}&limit=${limit}`,
-    { signal }
-  );
+  // Backwards compatible: third arg used to be a bare AbortSignal.
+  const { signal, bustCache = false } =
+    options instanceof AbortSignal ? { signal: options } : options;
+
+  let url = `${API_BASE_URL}/api-recent-earthquakes?locale=${localeSlug}&limit=${limit}`;
+  if (bustCache) {
+    url += `&_t=${Date.now()}`;
+  }
+
+  const response = await fetch(url, {
+    signal,
+    ...(bustCache && { cache: "no-store" as RequestCache }),
+  });
 
   if (!response.ok) {
     throw new Error("Failed to fetch recent earthquakes");

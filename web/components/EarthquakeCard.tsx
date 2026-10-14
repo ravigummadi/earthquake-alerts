@@ -1,13 +1,33 @@
 "use client";
 
 import { getMagnitudeClass, type Earthquake } from "@/lib/api";
+import {
+  distanceFromCenterMiles,
+  formatDepth,
+  formatDistance,
+  localizePlace,
+  type DistanceUnit,
+  type LatLng,
+} from "@/lib/geo";
 
 interface EarthquakeCardProps {
   earthquake: Earthquake;
+  /** Locale center; when provided, a "Distance" stat is shown. */
+  center?: LatLng;
+  /** Unit for distance/depth and the USGS place string. Defaults to miles. */
+  distanceUnit?: DistanceUnit;
 }
 
-export default function EarthquakeCard({ earthquake }: EarthquakeCardProps) {
+export default function EarthquakeCard({
+  earthquake,
+  center,
+  distanceUnit = "mi",
+}: EarthquakeCardProps) {
   const magnitudeClass = getMagnitudeClass(earthquake.magnitude);
+  const place = localizePlace(earthquake.place, distanceUnit);
+  const distance = center
+    ? formatDistance(distanceFromCenterMiles(earthquake, center), distanceUnit)
+    : null;
   const date = new Date(earthquake.time);
 
   const formattedDate = date.toLocaleDateString("en-US", {
@@ -29,7 +49,7 @@ export default function EarthquakeCard({ earthquake }: EarthquakeCardProps) {
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex-1 min-w-0">
           <h3 className="text-lg md:text-xl font-semibold text-white truncate">
-            {earthquake.place}
+            {place}
           </h3>
           <p className="text-slate-400 text-sm mt-1">
             {formattedDate} at {formattedTime}
@@ -42,7 +62,8 @@ export default function EarthquakeCard({ earthquake }: EarthquakeCardProps) {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-        <Stat label="Depth" value={`${earthquake.depth_km.toFixed(1)} km`} />
+        {distance && <Stat label="Distance" value={distance} />}
+        <Stat label="Depth" value={formatDepth(earthquake.depth_km, distanceUnit)} />
         <Stat label="Type" value={earthquake.mag_type.toUpperCase()} />
         <Stat
           label="Felt Reports"

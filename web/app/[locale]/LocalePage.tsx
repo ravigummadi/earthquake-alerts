@@ -9,19 +9,29 @@ import EarthquakeTable from "@/components/EarthquakeTable";
 import MapWrapper from "@/components/MapWrapper";
 import {
   type Earthquake,
-  type EarthquakeResponse,
   type Region,
   type LocaleConfig,
-  API_BASE_URL,
   REFRESH_INTERVAL_MS,
+  RECENT_EARTHQUAKES_MAX_LIMIT,
   fetchRecentEarthquakes,
 } from "@/lib/api";
+import {
+  distanceUnitForLocale,
+  filterWithinRadius,
+  formatRadius,
+  localeRadiusMiles,
+} from "@/lib/geo";
+
+/** Number of rows shown in the "recent earthquakes" table. */
+const RECENT_TABLE_ROWS = 10;
 
 interface LocalePageProps {
   localeSlug: string;
   initialDisplayName: string;
   initialCenter: { lat: number; lng: number };
   initialMinMagnitude: number;
+  /** Per-locale radius if the API provides one; otherwise the default applies. */
+  initialRadiusMiles?: number;
   allLocales: LocaleConfig[];
 }
 
@@ -30,6 +40,7 @@ export default function LocalePage({
   initialDisplayName,
   initialCenter,
   initialMinMagnitude,
+  initialRadiusMiles,
   allLocales,
 }: LocalePageProps) {
   // Transform locales for Header navigation
@@ -48,15 +59,18 @@ export default function LocalePage({
   const fromAlert = searchParams.get("from") === "alert";
   const hasCleanedUrlRef = useRef(false);
 
-  // Recent earthquakes state
-  const [recentEarthquakes, setRecentEarthquakes] = useState<Earthquake[]>([]);
+  // Earthquakes within the locale radius (newest first), derived from the same
+  // fetch as the headline earthquake. The table shows the first few of these.
+  const [nearbyEarthquakes, setNearbyEarthquakes] = useState<Earthquake[]>([]);
   const [showRecentTable, setShowRecentTable] = useState(false);
-  const [loadingRecent, setLoadingRecent] = useState(false);
-  const [recentError, setRecentError] = useState<string | null>(null);
 
   // Use region data from API once loaded, fallback to initial props
   const displayName = region?.display_name ?? initialDisplayName;
   const center = region?.center ?? initialCenter;
+  const radiusMiles = localeRadiusMiles({
+    radius_miles: region?.radius_miles ?? initialRadiusMiles,
+  });
+  const distanceUnit = distanceUnitForLocale(center);
 
   useEffect(() => {
     async function fetchData(bustCache: boolean = false) {
@@ -68,25 +82,23 @@ export default function LocalePage({
         setLoading(true);
         setError(null);
 
-        // Add cache-busting timestamp when coming from an alert link
-        // This ensures the user sees the freshest data matching their alert
-        let url = `${API_BASE_URL}/api-latest-earthquake?locale=${localeSlug}`;
-        if (bustCache) {
-          url += `&_t=${Date.now()}`;
-        }
-
-        const response = await fetch(url, {
-          signal: abortControllerRef.current.signal,
-          // Force no-cache when coming from alert to bypass any CDN/browser caching
-          ...(bustCache && { cache: "no-store" }),
+        // The API filters by the locale's (large) bounding box only. Fetch the
+        // newest quakes in that box and keep those within the locale radius,
+        // so the headline quake is the latest one actually near this locale.
+        // Cache-busting is used when coming from an alert link so the user
+        // sees the freshest data matching their alert.
+        const data = await fetchRecentEarthquakes(
+          localeSlug,
+          RECENT_EARTHQUAKES_MAX_LIMIT,
+          { signal: abortControllerRef.current.signal, bustCache }
+        );
+        const radius = localeRadiusMiles({
+          radius_miles: data.region.radius_miles ?? initialRadiusMiles,
         });
+        const nearby = filterWithinRadius(data.earthquakes, data.region.center, radius);
 
-        if (!response.ok) {
-          throw new Error("Failed to fetch earthquake data");
-        }
-
-        const data: EarthquakeResponse = await response.json();
-        setEarthquake(data.latest_earthquake);
+        setNearbyEarthquakes(nearby);
+        setEarthquake(nearby[0] ?? null);
         setRegion(data.region);
         setMinMagnitude(data.min_magnitude_filter);
       } catch (err) {
@@ -119,32 +131,12 @@ export default function LocalePage({
       clearInterval(interval);
       abortControllerRef.current?.abort();
     };
-  }, [localeSlug, fromAlert, pathname, router]);
+  }, [localeSlug, fromAlert, pathname, router, initialRadiusMiles]);
 
-  // Reset recent earthquakes when locale changes
+  // Collapse the recent table when locale changes
   useEffect(() => {
     setShowRecentTable(false);
-    setRecentEarthquakes([]);
-    setRecentError(null);
   }, [localeSlug]);
-
-  async function handleLoadRecentEarthquakes() {
-    if (loadingRecent) return;
-
-    setLoadingRecent(true);
-    setRecentError(null);
-
-    try {
-      const data = await fetchRecentEarthquakes(localeSlug, 10);
-      setRecentEarthquakes(data.earthquakes);
-      setShowRecentTable(true);
-    } catch (err) {
-      console.error("Error fetching recent earthquakes:", err);
-      setRecentError("Unable to load recent earthquakes. Please try again.");
-    } finally {
-      setLoadingRecent(false);
-    }
-  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -159,6 +151,10 @@ export default function LocalePage({
             </h1>
             <p className="text-slate-400 text-lg max-w-2xl mx-auto">
               Real-time earthquake monitoring powered by USGS data
+            </p>
+            <p className="text-slate-500 text-sm">
+              Showing M{minMagnitude}+ earthquakes within{" "}
+              {formatRadius(radiusMiles, distanceUnit)} of {region?.name ?? displayName}
             </p>
           </section>
 
@@ -180,7 +176,8 @@ export default function LocalePage({
             ) : (
               <div className="text-center py-8">
                 <p className="text-slate-400">
-                  No earthquakes M{minMagnitude}+ in the past 30 days
+                  No earthquakes M{minMagnitude}+ within{" "}
+                  {formatRadius(radiusMiles, distanceUnit)} in the past 30 days
                 </p>
                 <p className="text-green-400 text-lg font-medium mt-2">
                   All quiet in {region?.name ?? displayName}
@@ -195,12 +192,17 @@ export default function LocalePage({
             <MapWrapper
               earthquake={earthquake}
               center={center}
+              distanceUnit={distanceUnit}
             />
 
             {/* Earthquake Details */}
             <div className="space-y-6">
               {earthquake ? (
-                <EarthquakeCard earthquake={earthquake} />
+                <EarthquakeCard
+                  earthquake={earthquake}
+                  center={center}
+                  distanceUnit={distanceUnit}
+                />
               ) : (
                 <div className="card p-8 text-center">
                   <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
@@ -222,7 +224,8 @@ export default function LocalePage({
                     No Recent Earthquakes
                   </h3>
                   <p className="text-slate-400">
-                    No significant seismic activity detected in the past 30 days.
+                    No significant seismic activity within{" "}
+                    {formatRadius(radiusMiles, distanceUnit)} in the past 30 days.
                   </p>
                 </div>
               )}
@@ -253,34 +256,21 @@ export default function LocalePage({
             {!showRecentTable ? (
               <div className="text-center">
                 <button
-                  onClick={handleLoadRecentEarthquakes}
-                  disabled={loadingRecent}
+                  onClick={() => setShowRecentTable(true)}
+                  disabled={loading}
                   className="inline-flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700
                              disabled:bg-slate-800/50 disabled:cursor-not-allowed
                              text-white font-medium rounded-lg transition-colors"
                 >
-                  {loadingRecent ? (
-                    <>
-                      <div
-                        className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"
-                        role="status"
-                        aria-label="Loading"
-                      />
-                      Loading...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4 6h16M4 10h16M4 14h16M4 18h16"
-                        />
-                      </svg>
-                      Load Last 10 Earthquakes
-                    </>
-                  )}
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                    />
+                  </svg>
+                  Show Last {RECENT_TABLE_ROWS} Earthquakes
                 </button>
               </div>
             ) : (
@@ -296,14 +286,12 @@ export default function LocalePage({
                     Hide
                   </button>
                 </div>
-                <EarthquakeTable earthquakes={recentEarthquakes} />
+                <EarthquakeTable
+                  earthquakes={nearbyEarthquakes.slice(0, RECENT_TABLE_ROWS)}
+                  center={center}
+                  distanceUnit={distanceUnit}
+                />
               </>
-            )}
-
-            {recentError && (
-              <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-center">
-                <p className="text-yellow-400 text-sm">{recentError}</p>
-              </div>
             )}
           </section>
         </div>
