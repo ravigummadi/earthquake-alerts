@@ -891,6 +891,7 @@ class TestOrchestratorProcessLifecycle:
         }
         mock_firestore = MagicMock(spec=FirestoreClient)
         mock_firestore.get_alerted_ids.return_value = set()
+        mock_slack = MagicMock(spec=SlackClient)
 
         # Rule requires M >= 5.0
         channel = AlertChannel(
@@ -901,6 +902,7 @@ class TestOrchestratorProcessLifecycle:
             config=config,
             usgs_client=mock_usgs,
             firestore_client=mock_firestore,
+            slack_client=mock_slack,
         )
 
         result = orch.process()
@@ -909,6 +911,8 @@ class TestOrchestratorProcessLifecycle:
         assert result.earthquakes_fetched == 1
         assert result.earthquakes_new == 1
         assert len(result.alerts_sent) == 0
+        assert len(result.alerts_failed) == 0
+        mock_slack.send_message.assert_not_called()
         mock_firestore.add_alerted_ids.assert_not_called()
 
     def test_process_happy_path_alerts_and_deduplicates(self):
