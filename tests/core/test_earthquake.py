@@ -310,3 +310,87 @@ class TestParseEarthquakeTypes:
         assert result is not None
         assert result.types == ""
         assert result.has_shakemap is False
+
+
+class TestEmptyUsgsFeedEdgeCases:
+    """Edge case tests for empty or malformed USGS feeds."""
+
+    def test_parse_earthquakes_empty_dict(self):
+        """Empty dictionary returns empty list."""
+        assert parse_earthquakes({}) == []
+
+    def test_parse_earthquakes_empty_features_list(self):
+        """GeoJSON FeatureCollection with empty features array returns empty list."""
+        geojson = {
+            "type": "FeatureCollection",
+            "metadata": {"count": 0},
+            "features": [],
+        }
+        assert parse_earthquakes(geojson) == []
+
+    def test_parse_earthquakes_all_invalid_features(self):
+        """Feed with only invalid features returns empty list without error."""
+        geojson = {
+            "features": [
+                {},
+                {"type": "Feature", "properties": {}},
+                {"type": "Feature", "properties": {"mag": 3.0}, "geometry": {"coordinates": [0, 0]}},
+            ]
+        }
+        assert parse_earthquakes(geojson) == []
+
+    def test_parse_earthquake_empty_feature(self):
+        """parse_earthquake on empty dict returns None."""
+        assert parse_earthquake({}) is None
+
+    def test_filter_by_magnitude_empty_list(self):
+        """filter_by_magnitude on empty list returns empty list."""
+        assert filter_by_magnitude([], min_magnitude=3.0, max_magnitude=5.0) == []
+
+    def test_filter_by_time_empty_list(self):
+        """filter_by_time on empty list returns empty list."""
+        now = datetime.now(timezone.utc)
+        assert filter_by_time([], after=now, before=now) == []
+
+
+class TestMagnitudeBoundaryFilteringEdgeCases:
+    """Edge cases for magnitude boundary values in core filtering functions."""
+
+    @pytest.fixture
+    def magnitude_earthquakes(self):
+        """Create sample earthquakes with varying magnitudes including boundaries."""
+        base = parse_earthquake(SAMPLE_FEATURE)
+        assert base is not None
+        mags = [-1.0, -0.5, 0.0, 2.99, 3.0, 4.0, 5.0, 5.01]
+        return [
+            Earthquake(**{**base.__dict__, "id": f"eq_{m}", "magnitude": m})
+            for m in mags
+        ]
+
+    def test_filter_by_magnitude_inclusive_endpoints(self, magnitude_earthquakes):
+        """Both min_magnitude and max_magnitude boundaries are strictly inclusive."""
+        result = filter_by_magnitude(
+            magnitude_earthquakes, min_magnitude=3.0, max_magnitude=5.0
+        )
+        assert [e.magnitude for e in result] == [3.0, 4.0, 5.0]
+
+    def test_filter_by_magnitude_point_range(self, magnitude_earthquakes):
+        """min == max returns exactly matching magnitude."""
+        result = filter_by_magnitude(
+            magnitude_earthquakes, min_magnitude=4.0, max_magnitude=4.0
+        )
+        assert [e.magnitude for e in result] == [4.0]
+
+    def test_filter_by_magnitude_negative_and_zero(self, magnitude_earthquakes):
+        """Correctly filters negative and zero magnitude earthquakes."""
+        result = filter_by_magnitude(
+            magnitude_earthquakes, min_magnitude=-0.5, max_magnitude=0.0
+        )
+        assert [e.magnitude for e in result] == [-0.5, 0.0]
+
+    def test_filter_by_magnitude_inverted_range_returns_empty(self, magnitude_earthquakes):
+        """min_magnitude > max_magnitude returns empty list."""
+        result = filter_by_magnitude(
+            magnitude_earthquakes, min_magnitude=5.0, max_magnitude=3.0
+        )
+        assert result == []
