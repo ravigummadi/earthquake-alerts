@@ -4,13 +4,20 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { getMagnitudeColor, type Earthquake } from "@/lib/api";
+import { formatDepth, localizePlace, type DistanceUnit } from "@/lib/geo";
 
 interface EarthquakeMapProps {
   earthquake: Earthquake | null;
   center: { lat: number; lng: number };
+  /** Unit for the popup's depth and place string. Defaults to miles. */
+  distanceUnit?: DistanceUnit;
 }
 
-export default function EarthquakeMap({ earthquake, center }: EarthquakeMapProps) {
+export default function EarthquakeMap({
+  earthquake,
+  center,
+  distanceUnit = "mi",
+}: EarthquakeMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
 
@@ -80,8 +87,8 @@ export default function EarthquakeMap({ earthquake, center }: EarthquakeMapProps
       marker.bindPopup(`
         <div style="text-align: center; min-width: 150px;">
           <strong style="font-size: 18px; color: ${color};">M${earthquake.magnitude.toFixed(1)}</strong>
-          <p style="margin: 8px 0 4px 0; font-size: 12px; color: #666;">${earthquake.place}</p>
-          <p style="margin: 0; font-size: 11px; color: #999;">Depth: ${earthquake.depth_km.toFixed(1)} km</p>
+          <p style="margin: 8px 0 4px 0; font-size: 12px; color: #666;">${localizePlace(earthquake.place, distanceUnit)}</p>
+          <p style="margin: 0; font-size: 11px; color: #999;">Depth: ${formatDepth(earthquake.depth_km, distanceUnit)}</p>
         </div>
       `);
 
@@ -99,7 +106,7 @@ export default function EarthquakeMap({ earthquake, center }: EarthquakeMapProps
         animate: true,
       });
     }
-  }, [earthquake]);
+  }, [earthquake, distanceUnit]);
 
   return (
     <div className="card overflow-hidden h-[300px] md:h-[400px]">

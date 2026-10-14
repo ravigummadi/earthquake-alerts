@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
 import { fetchLocales } from "@/lib/api";
@@ -44,13 +45,18 @@ export default async function Page({ params }: PageProps) {
     notFound();
   }
 
+  // LocalePage uses useSearchParams(), which requires a Suspense boundary for
+  // static prerendering (otherwise `next build` fails on this route).
   return (
-    <LocalePage
-      localeSlug={locale.slug}
-      initialDisplayName={locale.display_name}
-      initialCenter={locale.center}
-      initialMinMagnitude={locale.min_magnitude}
-      allLocales={allLocales}
-    />
+    <Suspense fallback={null}>
+      <LocalePage
+        localeSlug={locale.slug}
+        initialDisplayName={locale.display_name}
+        initialCenter={locale.center}
+        initialMinMagnitude={locale.min_magnitude}
+        initialRadiusMiles={locale.radius_miles ?? undefined}
+        allLocales={allLocales}
+      />
+    </Suspense>
   );
 }
